@@ -8,8 +8,9 @@ public class PollutionManager implements PropagationManager {
 
     private final List<PropagationEmitter> emitters = new ArrayList<>();
     private final List<PropagationInfluencer> influencers = new ArrayList<>();
-
     private final PropagationSpatialIndex spatialIndex = new PropagationSpatialIndex();
+    private static final int UPDATE_INTERVAL = 20;
+    private int updateCursor;
 
     @Override
     public void registerEmitter(PropagationEmitter emitter) {
@@ -50,41 +51,48 @@ public class PollutionManager implements PropagationManager {
 
     @Override
     public void unregisterInfluencer(PropagationInfluencer influencer) {
-        influencers.remove(influencer);
+        if (!influencers.remove(influencer)) return;
+
+        for (PropagationEmitter emitter : emitters) {
+            emitter.removeInfluencer(influencer);
+        }
     }
 
     @Override
     public float getPollution(Vec3 pos) {
-        float result = 0.0F;
+        double result = 0.0D;
 
         for (PropagationEmitter emitter : spatialIndex.get(pos)) {
-
-            Vec3 emitterPos = emitter.getPosition();
-
-            double distance = emitterPos.distanceTo(pos);
-
-            if (distance > emitter.getPropagationRange()) {
-                continue;
-            }
-
-            double influence = emitter.getEmissionRate();
-
-            InfluenceVector vector =
-                new InfluenceVector(emitterPos, pos);
-
-            for (PropagationInfluencer influencer : emitter.getInfluencers()) {
-                influence *= influencer.influence(pos, vector);
-            }
-
-            result = (float) (result + influence);
+            result += emitter.getInfluence(pos);
         }
 
-        return result;
+        return (float) result;
     }
 
     @Override
-    public void tick() {
-        // обновление эмиттеров
+    public void tick(int tick) {
+        if (emitters.isEmpty()) {
+            updateCursor = 0;
+            return;
+        }
+
+        int updates = Math.max(1, (emitters.size() + UPDATE_INTERVAL - 1) / UPDATE_INTERVAL);
+
+        for (int i = 0; i < updates && !emitters.isEmpty(); i++) {
+            if (updateCursor >= emitters.size()) {
+                updateCursor = 0;
+            }
+
+            PropagationEmitter emitter = emitters.get(updateCursor);
+
+            if (!emitter.isValid()) {
+                unregisterEmitter(emitter);
+                continue;
+            }
+
+            emitter.update(tick);
+            updateCursor++;
+        }
     }
 
     private boolean canInfluence(PropagationEmitter emitter, PropagationInfluencer influencer) {

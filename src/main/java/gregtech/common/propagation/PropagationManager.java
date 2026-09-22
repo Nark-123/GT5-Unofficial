@@ -14,5 +14,5 @@ public interface PropagationManager {
 
     float getPollution(Vec3 pos);
 
-    void tick();
+    void tick(int tick);
 }

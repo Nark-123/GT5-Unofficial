@@ -6,7 +6,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
-public class PollutionEmitter {
+public class PollutionEmitter implements PropagationEmitter{
 
     private static final double DEFAULT_SMOOTHING = 0.25D;
     private static final double DEFAULT_POLLUTION_THRESHOLD = 0.05D;
@@ -35,28 +35,30 @@ public class PollutionEmitter {
 
     private boolean published;
 
-    public PollutionEmitter(int dimension, Vec3 cellPosition) {
+    private final double propagationRange;
+    private final List<PropagationInfluencer> influencers = new ArrayList<>();
+
+    public PollutionEmitter(int dimension, Vec3 cellPosition, double propagationRange) {
         this(
             dimension,
             cellPosition,
+            propagationRange,
             DEFAULT_SMOOTHING,
             DEFAULT_POLLUTION_THRESHOLD,
             DEFAULT_CENTER_THRESHOLD
         );
     }
 
-    public PollutionEmitter(
-        int dimension,
-        Vec3 cellPosition,
-        double smoothing,
-        double pollutionThreshold,
-        double centerThreshold) {
-
+    public PollutionEmitter(int dimension, Vec3 cellPosition, double propagationRange,
+                            double smoothing, double pollutionThreshold, double centerThreshold) {
         this.dimension = dimension;
         this.cellPosition = cellPosition;
+        this.propagationRange = propagationRange;
         this.smoothing = smoothing;
         this.pollutionThreshold = pollutionThreshold;
         this.centerThresholdSquared = centerThreshold * centerThreshold;
+        this.center = getCellCenter(cellPosition);
+        this.publishedCenter = center;
     }
 
     public void addSupplier(PollutionSource supplier) {
@@ -177,6 +179,90 @@ public class PollutionEmitter {
         double centerShiftSquared = dx * dx + dy * dy + dz * dz;
 
         return centerShiftSquared >= centerThresholdSquared;
+    }
+
+    @Override
+    public double getInfluence(Vec3 pos) {
+        Vec3 emitterPos = getPosition();
+
+        if (emitterPos.distanceTo(pos) > propagationRange) {
+            return 0.0D;
+        }
+
+        double influence = pollution;
+
+        if (influence <= 0.0D) {
+            return 0.0D;
+        }
+
+        InfluenceVector vector = new InfluenceVector(emitterPos, pos);
+
+        for (PropagationInfluencer influencer : influencers) {
+            influence *= influencer.influence(pos, vector);
+        }
+
+        return influence;
+    }
+
+    @Override
+    public boolean isValid() {
+        if (pollution > 0.0D) {
+            return true;
+        }
+
+        for (PollutionSource supplier : suppliers) {
+            if (supplier.isValid()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    @Override
+    public void addInfluencer(PropagationInfluencer influencer) {
+        if (!influencers.contains(influencer)) {
+            influencers.add(influencer);
+        }
+    }
+
+    private Vec3 getCellCenter(Vec3 cellPosition) {
+        return Vec3.createVectorHelper(
+            cellPosition.xCoord * 16.0D + 8.0D,
+            cellPosition.yCoord * 16.0D + 8.0D,
+            cellPosition.zCoord * 16.0D + 8.0D
+        );
+    }
+
+
+    @Override
+    public Vec3 getPosition() {
+        return center;
+    }
+
+    @Override
+    public double getEmissionRate() {
+        return pollution;
+    }
+
+    @Override
+    public double getPropagationRange() {
+        return propagationRange;
+    }
+
+    @Override
+    public List<PropagationInfluencer> getInfluencers() {
+        return influencers;
+    }
+
+    @Override
+    public void removeInfluencer(PropagationInfluencer influencer) {
+        influencers.remove(influencer);
+    }
+
+    @Override
+    public PropagationType getType() {
+        return PropagationType.POLLUTION;
     }
 
     public boolean isEmpty() {
