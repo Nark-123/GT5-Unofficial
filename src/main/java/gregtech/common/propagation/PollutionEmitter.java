@@ -6,7 +6,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
-public class PollutionEmitter implements PropagationEmitter{
+public class PollutionEmitter{
 
     private static final double DEFAULT_SMOOTHING = 0.25D;
     private static final double DEFAULT_POLLUTION_THRESHOLD = 0.05D;
@@ -17,7 +17,7 @@ public class PollutionEmitter implements PropagationEmitter{
     // Pollution grid cell position
     private final Vec3 cellPosition;
 
-    private final List<PollutionSource> suppliers = new ArrayList<>();
+    private final List<PropagationSource> sources = new ArrayList<>();
 
     private final double smoothing;
     private final double pollutionThreshold;
@@ -61,26 +61,30 @@ public class PollutionEmitter implements PropagationEmitter{
         this.publishedCenter = center;
     }
 
-    public void addSupplier(PollutionSource supplier) {
-        if (supplier == null) {
-            throw new IllegalArgumentException("supplier cannot be null");
+    public void addSource(PropagationSource source) {
+        if (source == null) {
+            throw new IllegalArgumentException("source cannot be null");
         }
 
-        if (supplier.getDimension() != dimension
-            || supplier.getCellPosition().xCoord != cellPosition.xCoord
-            || supplier.getCellPosition().yCoord != cellPosition.yCoord
-            || supplier.getCellPosition().zCoord != cellPosition.zCoord) {
-
-            throw new IllegalArgumentException("Supplier belongs to another pollution cell");
+        if (source.getDimension() != dimension) {
+            throw new IllegalArgumentException("Source belongs to another dimension");
         }
 
-        if (!suppliers.contains(supplier)) {
-            suppliers.add(supplier);
+        Vec3 sourceCell = getCellPosition(source.getPosition());
+
+        if (sourceCell.xCoord != cellPosition.xCoord
+            || sourceCell.yCoord != cellPosition.yCoord
+            || sourceCell.zCoord != cellPosition.zCoord) {
+            throw new IllegalArgumentException("Source belongs to another pollution cell");
+        }
+
+        if (!sources.contains(source)) {
+            sources.add(source);
         }
     }
 
-    public void removeSupplier(PollutionSource supplier) {
-        suppliers.remove(supplier);
+    public void removeSource(PropagationSource source) {
+        sources.remove(source);
     }
 
     public boolean update(long currentTick) {
@@ -97,32 +101,32 @@ public class PollutionEmitter implements PropagationEmitter{
         double weightedY = 0.0D;
         double weightedZ = 0.0D;
 
-        Iterator<PollutionSource> iterator = suppliers.iterator();
+        Iterator<PropagationSource> iterator = sources.iterator();
 
         while (iterator.hasNext()) {
-            PollutionSource supplier = iterator.next();
+            PropagationSource source = iterator.next();
 
-            if (!supplier.isValid()) {
+            if (!source.isValid()) {
                 iterator.remove();
                 continue;
             }
 
-            double produced = supplier.consumePollution();
+            double produced = source.consumeEmission();
             double averageEmission = produced / elapsedTicks;
-            double oldEffective = supplier.getEffectivePollution();
+            double oldEffective = source.getEffectiveEmission();
             double newEffective = oldEffective + smoothing * (averageEmission - oldEffective);
 
             if (newEffective < 1.0E-9D) {
                 newEffective = 0.0D;
             }
 
-            supplier.setEffectivePollution(newEffective);
+            source.setEffectiveEmission(newEffective);
 
             if (newEffective <= 0.0D) {
                 continue;
             }
 
-            Vec3 pos = supplier.getPosition();
+            Vec3 pos = source.getPosition();
 
             totalWeight += newEffective;
             weightedX += newEffective * pos.xCoord;
@@ -181,7 +185,7 @@ public class PollutionEmitter implements PropagationEmitter{
         return centerShiftSquared >= centerThresholdSquared;
     }
 
-    @Override
+
     public double getInfluence(Vec3 pos) {
         Vec3 emitterPos = getPosition();
 
@@ -204,14 +208,14 @@ public class PollutionEmitter implements PropagationEmitter{
         return influence;
     }
 
-    @Override
+
     public boolean isValid() {
         if (pollution > 0.0D) {
             return true;
         }
 
-        for (PollutionSource supplier : suppliers) {
-            if (supplier.isValid()) {
+        for (PropagationSource source : sources) {
+            if (source.isValid()) {
                 return true;
             }
         }
@@ -219,7 +223,7 @@ public class PollutionEmitter implements PropagationEmitter{
         return false;
     }
 
-    @Override
+
     public void addInfluencer(PropagationInfluencer influencer) {
         if (!influencers.contains(influencer)) {
             influencers.add(influencer);
@@ -234,47 +238,40 @@ public class PollutionEmitter implements PropagationEmitter{
         );
     }
 
-
-    @Override
     public Vec3 getPosition() {
         return center;
     }
 
-    @Override
     public double getEmissionRate() {
         return pollution;
     }
 
-    @Override
     public double getPropagationRange() {
         return propagationRange;
     }
 
-    @Override
     public List<PropagationInfluencer> getInfluencers() {
         return influencers;
     }
 
-    @Override
     public void removeInfluencer(PropagationInfluencer influencer) {
         influencers.remove(influencer);
     }
 
-    @Override
     public PropagationType getType() {
         return PropagationType.POLLUTION;
     }
 
     public boolean isEmpty() {
-        return suppliers.isEmpty() && pollution <= 0.0D;
+        return sources.isEmpty() && pollution <= 0.0D;
     }
 
-    public boolean hasSuppliers() {
-        return !suppliers.isEmpty();
+    public boolean hasSources() {
+        return !sources.isEmpty();
     }
 
     public int getSupplierCount() {
-        return suppliers.size();
+        return sources.size();
     }
 
     public int getDimension() {
@@ -283,6 +280,14 @@ public class PollutionEmitter implements PropagationEmitter{
 
     public Vec3 getCellPosition() {
         return cellPosition;
+    }
+
+    private Vec3 getCellPosition(Vec3 position) {
+        return Vec3.createVectorHelper(
+            ((int) Math.floor(position.xCoord)) >> 4,
+            ((int) Math.floor(position.yCoord)) >> 4,
+            ((int) Math.floor(position.zCoord)) >> 4
+        );
     }
 
     public double getPollution() {

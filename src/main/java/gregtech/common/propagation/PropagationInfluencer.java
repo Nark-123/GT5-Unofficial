@@ -9,4 +9,6 @@ public interface PropagationInfluencer {
     Vec3 getPosition();
 
     double getRange();
+
+    boolean isValid();
 }

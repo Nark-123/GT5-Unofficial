@@ -25,10 +25,10 @@ public class PropagationSpatialIndex {
         }
     };
 
-    private final Map<Vec3, List<PropagationEmitter>> batches = new TreeMap<>(BATCH_COMPARATOR);
+    private final Map<Vec3, List<PollutionEmitter>> batches = new TreeMap<>(BATCH_COMPARATOR);
 
 
-    public void add(PropagationEmitter emitter) {
+    public void add(PollutionEmitter emitter) {
         Vec3 pos = emitter.getPosition();
         double range = emitter.getPropagationRange();
 
@@ -54,9 +54,9 @@ public class PropagationSpatialIndex {
     }
 
 
-    public void remove(PropagationEmitter emitter) {
-        for (java.util.Iterator<Map.Entry<Vec3, List<PropagationEmitter>>> iterator = batches.entrySet().iterator(); iterator.hasNext();) {
-            Map.Entry<Vec3, List<PropagationEmitter>> entry = iterator.next();
+    public void remove(PollutionEmitter emitter) {
+        for (java.util.Iterator<Map.Entry<Vec3, List<PollutionEmitter>>> iterator = batches.entrySet().iterator(); iterator.hasNext();) {
+            Map.Entry<Vec3, List<PollutionEmitter>> entry = iterator.next();
 
             entry.getValue().remove(emitter);
 
@@ -67,8 +67,8 @@ public class PropagationSpatialIndex {
     }
 
 
-    public List<PropagationEmitter> get(Vec3 position) {
-        List<PropagationEmitter> result = batches.get(getBatchPosition(position));
+    public List<PollutionEmitter> get(Vec3 position) {
+        List<PollutionEmitter> result = batches.get(getBatchPosition(position));
 
         if (result == null) {
             return java.util.Collections.emptyList();
@@ -78,7 +78,7 @@ public class PropagationSpatialIndex {
     }
 
 
-    private List<PropagationEmitter> getOrCreate(Vec3 position) {
+    private List<PollutionEmitter> getOrCreate(Vec3 position) {
         return batches.computeIfAbsent(position, k -> new ArrayList<>());
     }
 

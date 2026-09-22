@@ -4,15 +4,15 @@ import net.minecraft.util.Vec3;
 
 public interface PropagationManager {
 
-    void registerEmitter(PropagationEmitter emitter);
+    void registerSource(PropagationSource source);
 
-    void unregisterEmitter(PropagationEmitter emitter);
+    void unregisterSource(PropagationSource source);
 
     void registerInfluencer(PropagationInfluencer influencer);
 
     void unregisterInfluencer(PropagationInfluencer influencer);
 
-    float getPollution(Vec3 pos);
+    float sample(Vec3 pos);
 
     void tick(int tick);
 }

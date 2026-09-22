@@ -6,14 +6,51 @@ import java.util.*;
 
 public class PollutionManager implements PropagationManager {
 
-    private final List<PropagationEmitter> emitters = new ArrayList<>();
+    private final List<PollutionEmitter> emitters = new ArrayList<>();
     private final List<PropagationInfluencer> influencers = new ArrayList<>();
     private final PropagationSpatialIndex spatialIndex = new PropagationSpatialIndex();
     private static final int UPDATE_INTERVAL = 20;
     private int updateCursor;
+    private int influencerUpdateCursor;
+
+    private static final Comparator<Vec3> CELL_COMPARATOR = new Comparator<Vec3>() {
+        @Override
+        public int compare(Vec3 a, Vec3 b) {
+            int x = Double.compare(a.xCoord, b.xCoord);
+            if (x != 0) return x;
+            int y = Double.compare(a.yCoord, b.yCoord);
+            if (y != 0) return y;
+            return Double.compare(a.zCoord, b.zCoord);
+        }
+    };
+
+    private final Map<Vec3, PollutionEmitter> pollutionEmitters = new TreeMap<>(CELL_COMPARATOR);
 
     @Override
-    public void registerEmitter(PropagationEmitter emitter) {
+    public void registerSource(PropagationSource source) {
+        Vec3 cellPosition = getCellPosition(source.getPosition());
+
+        PollutionEmitter emitter = pollutionEmitters.get(cellPosition);
+
+        if (emitter == null) {
+            emitter = new PollutionEmitter(source.getDimension(), cellPosition, 50);
+            pollutionEmitters.put(cellPosition, emitter);
+            registerEmitter(emitter);
+        }
+
+        emitter.addSource(source);
+    }
+
+    public void unregisterSource(PropagationSource source) {
+        Vec3 cellPosition = getCellPosition(source.getPosition());
+        PollutionEmitter emitter = pollutionEmitters.get(cellPosition);
+
+        if (emitter == null) return;
+
+        emitter.removeSource(source);
+    }
+
+    public void registerEmitter(PollutionEmitter emitter) {
         if (emitters.contains(emitter)) {
             return;
         }
@@ -28,8 +65,7 @@ public class PollutionManager implements PropagationManager {
         }
     }
 
-    @Override
-    public void unregisterEmitter(PropagationEmitter emitter) {
+    public void unregisterEmitter(PollutionEmitter emitter) {
         emitters.remove(emitter);
         spatialIndex.remove(emitter);
     }
@@ -42,7 +78,7 @@ public class PollutionManager implements PropagationManager {
 
         influencers.add(influencer);
 
-        for (PropagationEmitter emitter : emitters) {
+        for (PollutionEmitter emitter : emitters) {
             if (canInfluence(emitter, influencer)) {
                 emitter.addInfluencer(influencer);
             }
@@ -53,16 +89,16 @@ public class PollutionManager implements PropagationManager {
     public void unregisterInfluencer(PropagationInfluencer influencer) {
         if (!influencers.remove(influencer)) return;
 
-        for (PropagationEmitter emitter : emitters) {
+        for (PollutionEmitter emitter : emitters) {
             emitter.removeInfluencer(influencer);
         }
     }
 
     @Override
-    public float getPollution(Vec3 pos) {
+    public float sample(Vec3 pos) {
         double result = 0.0D;
 
-        for (PropagationEmitter emitter : spatialIndex.get(pos)) {
+        for (PollutionEmitter emitter : spatialIndex.get(pos)) {
             result += emitter.getInfluence(pos);
         }
 
@@ -83,7 +119,7 @@ public class PollutionManager implements PropagationManager {
                 updateCursor = 0;
             }
 
-            PropagationEmitter emitter = emitters.get(updateCursor);
+            PollutionEmitter emitter = emitters.get(updateCursor);
 
             if (!emitter.isValid()) {
                 unregisterEmitter(emitter);
@@ -93,11 +129,39 @@ public class PollutionManager implements PropagationManager {
             emitter.update(tick);
             updateCursor++;
         }
+
+        if (influencers.isEmpty()) {
+            influencerUpdateCursor = 0;
+            return;
+        }
+
+        updates = Math.max(1, (influencers.size() + UPDATE_INTERVAL - 1) / UPDATE_INTERVAL);
+
+        for (int i = 0; i < updates && !influencers.isEmpty(); i++) {
+            if (influencerUpdateCursor >= influencers.size()) influencerUpdateCursor = 0;
+
+            PropagationInfluencer influencer = influencers.get(influencerUpdateCursor);
+
+            if (!influencer.isValid()) {
+                unregisterInfluencer(influencer);
+                continue;
+            }
+
+            influencerUpdateCursor++;
+        }
     }
 
-    private boolean canInfluence(PropagationEmitter emitter, PropagationInfluencer influencer) {
+    private boolean canInfluence(PollutionEmitter emitter, PropagationInfluencer influencer) {
         double range = emitter.getPropagationRange() + influencer.getRange();
         double distance = emitter.getPosition().distanceTo(influencer.getPosition());
         return distance <= range;
+    }
+
+    private Vec3 getCellPosition(Vec3 position) {
+        return Vec3.createVectorHelper(
+            ((int) Math.floor(position.xCoord)) >> 4,
+            ((int) Math.floor(position.yCoord)) >> 4,
+            ((int) Math.floor(position.zCoord)) >> 4
+        );
     }
 }

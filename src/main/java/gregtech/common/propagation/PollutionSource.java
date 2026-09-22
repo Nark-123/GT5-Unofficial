@@ -6,7 +6,7 @@ import gregtech.api.interfaces.tileentity.IGregTechTileEntity;
 import net.minecraft.util.Vec3;
 
 
-public class PollutionSource {
+public class PollutionSource implements PropagationSource {
 
     private final MTEMultiBlockBase machine;
 
@@ -63,7 +63,7 @@ public class PollutionSource {
      * Returns pollution produced since previous check
      * and resets the counter.
      */
-    public double consumePollution() {
+    public double consumeEmission() {
         double result = pendingPollution;
         pendingPollution = 0;
         return result;
@@ -101,11 +101,11 @@ public class PollutionSource {
         return cellPosition;
     }
 
-    public double getEffectivePollution() {
+    public double getEffectiveEmission() {
         return effectivePollution;
     }
 
-    public void setEffectivePollution(double value) {
+    public void setEffectiveEmission(double value) {
         effectivePollution = value;
     }
 }
