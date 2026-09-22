@@ -9,9 +9,11 @@ public class PollutionManager implements PropagationManager {
     private final List<PollutionEmitter> emitters = new ArrayList<>();
     private final List<PropagationInfluencer> influencers = new ArrayList<>();
     private final PropagationSpatialIndex spatialIndex = new PropagationSpatialIndex();
+    private final Map<Vec3, PollutionEmitter> pollutionEmitters = new TreeMap<>(CELL_COMPARATOR);
     private static final int UPDATE_INTERVAL = 20;
     private int updateCursor;
     private int influencerUpdateCursor;
+    private final int dimension;
 
     private static final Comparator<Vec3> CELL_COMPARATOR = new Comparator<Vec3>() {
         @Override
@@ -24,16 +26,22 @@ public class PollutionManager implements PropagationManager {
         }
     };
 
-    private final Map<Vec3, PollutionEmitter> pollutionEmitters = new TreeMap<>(CELL_COMPARATOR);
+
+    public PollutionManager(int dimension) {
+        this.dimension = dimension;
+    }
 
     @Override
     public void registerSource(PropagationSource source) {
-        Vec3 cellPosition = getCellPosition(source.getPosition());
+        if (source.getDimension() != dimension) {
+            throw new IllegalArgumentException("Source belongs to another dimension");
+        }
 
+        Vec3 cellPosition = getCellPosition(source.getPosition());
         PollutionEmitter emitter = pollutionEmitters.get(cellPosition);
 
         if (emitter == null) {
-            emitter = new PollutionEmitter(source.getDimension(), cellPosition, 50);
+            emitter = new PollutionEmitter(dimension, cellPosition, 50);
             pollutionEmitters.put(cellPosition, emitter);
             registerEmitter(emitter);
         }
@@ -41,7 +49,10 @@ public class PollutionManager implements PropagationManager {
         emitter.addSource(source);
     }
 
+    @Override
     public void unregisterSource(PropagationSource source) {
+        if (source.getDimension() != dimension) return;
+
         Vec3 cellPosition = getCellPosition(source.getPosition());
         PollutionEmitter emitter = pollutionEmitters.get(cellPosition);
 

@@ -23,10 +23,14 @@ import gregtech.api.util.WorldSpawnedEventBuilder;
 import gregtech.api.util.tooltip.TooltipHelper;
 import gregtech.common.pollution.Pollution;
 
+import gregtech.common.propagation.PollutionSource;
+import gregtech.common.propagation.PollutionManager;
+
 @SuppressWarnings("unused") // Unused API is expected within scope
 @IMetaTileEntity.SkipGenerateDescription
 @IMetaTileEntity.SkipGenerateName
 public class MTEHatchMuffler extends MTEHatch {
+    private PollutionSource pollutionSource;
 
     public MTEHatchMuffler(int aID, String aName, String aNameRegional, int aTier) {
         super(aID, aName, aNameRegional, aTier, 0, "");
@@ -197,10 +201,21 @@ public class MTEHatchMuffler extends MTEHatch {
      * @return pollution success
      */
     public boolean polluteEnvironment(MetaTileEntity mte, int pollutionAmount) {
-        if (getBaseMetaTileEntity().getAirAtSide(getBaseMetaTileEntity().getFrontFacing())) {
-            Pollution.addPollution(getBaseMetaTileEntity(), calculatePollutionReduction(pollutionAmount));
-            return true;
+        if (!getBaseMetaTileEntity().getAirAtSide(getBaseMetaTileEntity().getFrontFacing())) {
+            return false;
         }
-        return false;
+
+        int emittedPollution = calculatePollutionReduction(pollutionAmount);
+
+        Pollution.addPollution(getBaseMetaTileEntity(), emittedPollution);
+
+        if (pollutionSource == null) {
+            pollutionSource = new PollutionSource(this);
+            Pollution.getPropagationManager(getBaseMetaTileEntity().getWorld()).registerSource(pollutionSource);
+        }
+
+        pollutionSource.addPollution(emittedPollution);
+
+        return true;
     }
 }

@@ -14,6 +14,7 @@ import java.util.function.Consumer;
 import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
 
+import gregtech.common.propagation.PollutionManager;
 import net.minecraft.block.Block;
 import net.minecraft.block.material.Material;
 import net.minecraft.entity.EntityLivingBase;
@@ -82,18 +83,23 @@ public class Pollution {
     private final World world;
     private boolean blank = true;
     public static int mPlayerPollution;
-
+    private final PollutionManager propagationManager;
     private static final int POLLUTIONPACKET_MINVALUE = 1000;
 
     private static GT_PollutionEventHandler EVENT_HANDLER;
 
     public Pollution(World world) {
         this.world = world;
+        this.propagationManager = new PollutionManager(world.provider.dimensionId);
 
         if (EVENT_HANDLER == null) {
             EVENT_HANDLER = new GT_PollutionEventHandler();
             MinecraftForge.EVENT_BUS.register(EVENT_HANDLER);
         }
+    }
+
+    public static PollutionManager getPropagationManager(World world) {
+        return getPollutionManager(world).propagationManager;
     }
 
     public static void onWorldTick(TickEvent.WorldTickEvent aEvent) { // called from proxy
@@ -103,6 +109,10 @@ public class Pollution {
         final Pollution pollutionInstance = GTMod.proxy.dimensionWisePollution.get(aEvent.world.provider.dimensionId);
         if (pollutionInstance == null) return;
         pollutionInstance.tickPollutionInWorld((int) (aEvent.world.getTotalWorldTime() % cycleLen));
+
+        pollutionInstance.propagationManager.tick(
+            (int) aEvent.world.getTotalWorldTime()
+        );
     }
 
     public static BlockMatcher standardBlocks;
