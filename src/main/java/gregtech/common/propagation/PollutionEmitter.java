@@ -150,7 +150,9 @@ public class PollutionEmitter {
     }
 
     public double getInfluence(Vec3 pos) {
-        if (center.distanceTo(pos) > propagationRange) {
+        double distance = center.distanceTo(pos);
+
+        if (distance > propagationRange) {
             return 0.0D;
         }
 
@@ -158,8 +160,12 @@ public class PollutionEmitter {
             return 0.0D;
         }
 
-        double influence = pollution;
-        InfluenceVector vector = new InfluenceVector(center, pos);
+        double sigma = propagationRange / 3.0D;
+
+        double influence =pollution * Math.exp(-(distance * distance)/(2.0D * sigma * sigma));
+
+        InfluenceVector vector =
+            new InfluenceVector(center, pos);
 
         for (PropagationInfluencer influencer : influencers) {
             influence *= influencer.influence(pos, vector);
