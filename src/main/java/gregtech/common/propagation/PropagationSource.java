@@ -11,8 +11,5 @@ public interface PropagationSource {
     boolean isValid();
 
     double consumeEmission();
-
-    double getEffectiveEmission();
-
-    void setEffectiveEmission(double newEffective);
 }
+

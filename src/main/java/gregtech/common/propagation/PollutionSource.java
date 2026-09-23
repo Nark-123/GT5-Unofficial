@@ -7,12 +7,13 @@ import net.minecraft.util.Vec3;
 
 public class PollutionSource implements PropagationSource {
 
-    private final MetaTileEntity source;
+    private MetaTileEntity source;
+
     private final int dimension;
     private final Vec3 position;
 
-    private double pendingPollution;
-    private double effectivePollution;
+    private double emission;
+    private boolean toRemove;
 
     public PollutionSource(MetaTileEntity source) {
         this.source = source;
@@ -27,20 +28,18 @@ public class PollutionSource implements PropagationSource {
         this.position = Vec3.createVectorHelper(base.getXCoord(), base.getYCoord(), base.getZCoord());
     }
 
-    public void addPollution(double amount) {
-        pendingPollution += amount;
-    }
-
     @Override
     public double consumeEmission() {
-        double result = pendingPollution;
-        pendingPollution = 0;
-        return result;
+        double buffer = emission;
+        emission = 0;
+        return buffer;
     }
 
     @Override
     public boolean isValid() {
-        if (source == null) return false;
+        if (toRemove || source == null) {
+            return false;
+        }
 
         IGregTechTileEntity base = source.getBaseMetaTileEntity();
 
@@ -59,13 +58,11 @@ public class PollutionSource implements PropagationSource {
         return position;
     }
 
-    @Override
-    public double getEffectiveEmission() {
-        return effectivePollution;
+    public void remove() {
+        toRemove = true;
     }
 
-    @Override
-    public void setEffectiveEmission(double value) {
-        effectivePollution = value;
+    public void addPollution(double amount) {
+        this.emission += amount;
     }
 }

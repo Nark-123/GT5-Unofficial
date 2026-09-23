@@ -26,7 +26,6 @@ public class PollutionManager implements PropagationManager {
         }
     };
 
-
     public PollutionManager(int dimension) {
         this.dimension = dimension;
     }
@@ -118,12 +117,18 @@ public class PollutionManager implements PropagationManager {
 
     @Override
     public void tick(int tick) {
+        tickEmitters(tick);
+        tickInfluencers();
+    }
+
+    private void tickEmitters(int tick) {
         if (emitters.isEmpty()) {
             updateCursor = 0;
             return;
         }
 
-        int updates = Math.max(1, (emitters.size() + UPDATE_INTERVAL - 1) / UPDATE_INTERVAL);
+        int emitterUpdateBudget = emitters.size();
+        int updates = emitterUpdateBudget / UPDATE_INTERVAL;
 
         for (int i = 0; i < updates && !emitters.isEmpty(); i++) {
             if (updateCursor >= emitters.size()) {
@@ -140,16 +145,21 @@ public class PollutionManager implements PropagationManager {
             emitter.update(tick);
             updateCursor++;
         }
+    }
 
+    private void tickInfluencers() {
         if (influencers.isEmpty()) {
             influencerUpdateCursor = 0;
             return;
         }
 
-        updates = Math.max(1, (influencers.size() + UPDATE_INTERVAL - 1) / UPDATE_INTERVAL);
+        int influencerUpdateBudget = influencers.size();
+        int updates = influencerUpdateBudget / UPDATE_INTERVAL;
 
         for (int i = 0; i < updates && !influencers.isEmpty(); i++) {
-            if (influencerUpdateCursor >= influencers.size()) influencerUpdateCursor = 0;
+            if (influencerUpdateCursor >= influencers.size()) {
+                influencerUpdateCursor = 0;
+            }
 
             PropagationInfluencer influencer = influencers.get(influencerUpdateCursor);
 

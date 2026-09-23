@@ -24,7 +24,6 @@ import gregtech.api.util.tooltip.TooltipHelper;
 import gregtech.common.pollution.Pollution;
 
 import gregtech.common.propagation.PollutionSource;
-import gregtech.common.propagation.PollutionManager;
 
 @SuppressWarnings("unused") // Unused API is expected within scope
 @IMetaTileEntity.SkipGenerateDescription
@@ -205,17 +204,27 @@ public class MTEHatchMuffler extends MTEHatch {
             return false;
         }
 
+        getOrCreatePropagationSource().addPollution((double) pollutionAmount);
+
         int emittedPollution = calculatePollutionReduction(pollutionAmount);
 
         Pollution.addPollution(getBaseMetaTileEntity(), emittedPollution);
 
-        if (pollutionSource == null) {
-            pollutionSource = new PollutionSource(this);
-            Pollution.getPropagationManager(getBaseMetaTileEntity().getWorld()).registerSource(pollutionSource);
-        }
-
-        pollutionSource.addPollution(emittedPollution);
-
         return true;
+    }
+
+    private PollutionSource getOrCreatePropagationSource() {
+        if (pollutionSource != null) return pollutionSource;
+
+        pollutionSource = new PollutionSource(this);
+
+        Pollution.getPropagationManager(getBaseMetaTileEntity().getWorld())
+            .registerSource(pollutionSource);
+
+        return pollutionSource;
+    }
+
+    public void removeSource() {
+        pollutionSource.remove();
     }
 }
