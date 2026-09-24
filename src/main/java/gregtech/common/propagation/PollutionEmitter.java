@@ -7,8 +7,8 @@ import java.util.Iterator;
 import java.util.List;
 
 public class PollutionEmitter {
-
-    private static final double DEFAULT_SMOOTHING = 0.25D;
+    //The half-life is 24 hours
+    private static final double DEFAULT_SMOOTHING = 0.99999198;
     private static final double DEFAULT_POLLUTION_THRESHOLD = 0.05D;
     private final int dimension;
     // Pollution grid cell position
@@ -22,8 +22,13 @@ public class PollutionEmitter {
     // Last published state
     private double publishedPollution;
     private boolean published;
-    private final double propagationRange;
     private final List<PropagationInfluencer> influencers = new ArrayList<>();
+    private static final double GAUSSIAN_3_SIGMA_MASS = 0.9707091135D;
+    private double basePropagationRange;
+    private double rangeMultiplier = 1.0D;
+    private double effectiveRange;
+    private double inverseRangeSquared;
+    private double gaussianNormalization;
 
     public PollutionEmitter(int dimension, Vec3 cellPosition, double propagationRange) {
         this(
@@ -44,10 +49,11 @@ public class PollutionEmitter {
     ) {
         this.dimension = dimension;
         this.cellPosition = cellPosition;
-        this.propagationRange = propagationRange;
         this.smoothing = smoothing;
         this.pollutionThreshold = pollutionThreshold;
         this.center = getCellCenter(cellPosition);
+        this.basePropagationRange = propagationRange;
+        recalculatePropagationRange();
     }
 
     public void addSource(PropagationSource source) {
@@ -81,13 +87,8 @@ public class PollutionEmitter {
         sources.remove(source);
     }
 
+    //happens once a second
     public boolean update(long currentTick) {
-        long elapsedTicks = currentTick - lastCheckTick;
-
-        if (elapsedTicks <= 0L) {
-            return false;
-        }
-
         lastCheckTick = currentTick;
         double incomingPollution = 0.0D;
         Iterator<PropagationSource> iterator = sources.iterator();
@@ -109,60 +110,33 @@ public class PollutionEmitter {
             incomingPollution += emission;
         }
 
-        pollution += smoothing *
-            (incomingPollution - pollution);
+        pollution += incomingPollution;
+
+        if (currentTick % (1200) == 0) {
+            pollution *= smoothing;
+        }
 
         if (pollution < 1.0E-9D) {
             pollution = 0.0D;
         }
 
-        boolean publish = shouldPublish();
-
-        if (publish) {
-            publishedPollution = pollution;
-            published = true;
-        }
-
-        return publish;
-    }
-
-    private boolean shouldPublish() {
-        if (!published) {
-            return pollution > 0.0D;
-        }
-
-        if (pollution == 0.0D && publishedPollution != 0.0D) {
-            return true;
-        }
-
-        double denominator = Math.max(
-            Math.abs(pollution),
-            Math.abs(publishedPollution)
-        );
-
-        double relativeChange =
-            denominator == 0.0D
-                ? 0.0D
-                : Math.abs(pollution - publishedPollution)
-                / denominator;
-
-        return relativeChange >= pollutionThreshold;
+        return true;
     }
 
     public double getInfluence(Vec3 pos) {
-        double distance = center.distanceTo(pos);
-
-        if (distance > propagationRange) {
-            return 0.0D;
-        }
-
         if (pollution <= 0.0D) {
             return 0.0D;
         }
 
-        double sigma = propagationRange / 3.0D;
+        double distance = center.distanceTo(pos);
 
-        double influence =pollution * Math.exp(-(distance * distance)/(2.0D * sigma * sigma));
+        if (distance > effectiveRange) {
+            return 0.0D;
+        }
+
+        double distanceSquared = distance * distance;
+
+        double influence = pollution / gaussianNormalization * Math.exp(-4.5D * distanceSquared * inverseRangeSquared);
 
         InfluenceVector vector =
             new InfluenceVector(center, pos);
@@ -207,6 +181,19 @@ public class PollutionEmitter {
         );
     }
 
+    private void recalculatePropagationRange() {
+        effectiveRange = basePropagationRange * rangeMultiplier;
+        double rangeSquared = effectiveRange * effectiveRange;
+        inverseRangeSquared = 1.0D / rangeSquared;
+
+        gaussianNormalization =
+            Math.pow(2.0D * Math.PI, 1.5D)
+                * effectiveRange
+                * rangeSquared
+                / 27.0D
+                * GAUSSIAN_3_SIGMA_MASS;
+    }
+
     private Vec3 getCellPosition(Vec3 position) {
         return Vec3.createVectorHelper(
             ((int) Math.floor(position.xCoord)) >> 4,
@@ -215,16 +202,27 @@ public class PollutionEmitter {
         );
     }
 
+    public void setRangeMultiplier(double multiplier) {
+        if (multiplier <= 0.0D) {
+            throw new IllegalArgumentException(
+                "Range multiplier must be > 0"
+            );
+        }
+
+        if (rangeMultiplier == multiplier) {
+            return;
+        }
+
+        rangeMultiplier = multiplier;
+        recalculatePropagationRange();
+    }
+
     public Vec3 getPosition() {
         return center;
     }
 
-    public double getEmissionRate() {
-        return pollution;
-    }
-
     public double getPropagationRange() {
-        return propagationRange;
+        return effectiveRange;
     }
 
     public List<PropagationInfluencer> getInfluencers() {
