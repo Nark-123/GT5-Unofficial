@@ -12,6 +12,7 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.TreeSet;
 
+import gregtech.common.propagation.PollutionDebugRenderer;
 import net.minecraft.block.Block;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityPlayerSP;
@@ -192,6 +193,9 @@ public class GTClient extends GTProxy {
         super.onPreInitialization(event);
         SoundSystemConfig.setNumberNormalChannels(Client.preference.maxNumSounds);
         MinecraftForge.EVENT_BUS.register(new ExtraIcons());
+        MinecraftForge.EVENT_BUS.register(
+            new PollutionDebugRenderer()
+        );
         RenderInit.registerEarly();
         Minecraft.getMinecraft()
             .getResourcePackRepository().rprMetadataSerializer

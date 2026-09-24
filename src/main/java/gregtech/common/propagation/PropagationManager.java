@@ -1,6 +1,6 @@
 package gregtech.common.propagation;
 
-import net.minecraft.util.Vec3;
+import com.gtnewhorizon.gtnhlib.blockpos.BlockPos;
 
 public interface PropagationManager {
 
@@ -12,7 +12,7 @@ public interface PropagationManager {
 
     void unregisterInfluencer(PropagationInfluencer influencer);
 
-    float sample(Vec3 pos);
+    float sample(BlockPos pos);
 
     void tick(int tick);
 }

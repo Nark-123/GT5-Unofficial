@@ -1,5 +1,6 @@
 package gregtech.common.propagation;
 
+import com.gtnewhorizon.gtnhlib.blockpos.BlockPos;
 import net.minecraft.util.Vec3;
 
 import java.util.*;
@@ -40,7 +41,7 @@ public class PollutionManager implements PropagationManager {
         PollutionEmitter emitter = pollutionEmitters.get(cellPosition);
 
         if (emitter == null) {
-            emitter = new PollutionEmitter(dimension, cellPosition, 50);
+            emitter = new PollutionEmitter(dimension, cellPosition, 256);
             pollutionEmitters.put(cellPosition, emitter);
             registerEmitter(emitter);
         }
@@ -105,11 +106,12 @@ public class PollutionManager implements PropagationManager {
     }
 
     @Override
-    public float sample(Vec3 pos) {
+    public float sample(BlockPos pos) {
+        Vec3 vec = Vec3.createVectorHelper(pos.x, pos.y, pos.z);
         double result = 0.0D;
 
-        for (PollutionEmitter emitter : spatialIndex.get(pos)) {
-            result += emitter.getInfluence(pos);
+        for (PollutionEmitter emitter : spatialIndex.get(vec)) {
+            result += emitter.getInfluence(vec);
         }
 
         return (float) result;
@@ -117,6 +119,9 @@ public class PollutionManager implements PropagationManager {
 
     @Override
     public void tick(int tick) {
+        if (tick % 20 != 0) {
+            return;
+        }
         tickEmitters(tick);
         tickInfluencers();
     }
@@ -128,7 +133,7 @@ public class PollutionManager implements PropagationManager {
         }
 
         int emitterUpdateBudget = emitters.size();
-        int updates = emitterUpdateBudget / UPDATE_INTERVAL;
+        int updates = Math.max(emitterUpdateBudget / UPDATE_INTERVAL, emitterUpdateBudget);
 
         for (int i = 0; i < updates && !emitters.isEmpty(); i++) {
             if (updateCursor >= emitters.size()) {
@@ -154,7 +159,7 @@ public class PollutionManager implements PropagationManager {
         }
 
         int influencerUpdateBudget = influencers.size();
-        int updates = influencerUpdateBudget / UPDATE_INTERVAL;
+        int updates = Math.max(influencerUpdateBudget / UPDATE_INTERVAL, influencerUpdateBudget);
 
         for (int i = 0; i < updates && !influencers.isEmpty(); i++) {
             if (influencerUpdateCursor >= influencers.size()) {

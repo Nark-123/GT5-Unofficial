@@ -14,6 +14,7 @@ import java.util.function.Consumer;
 import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
 
+import com.gtnewhorizon.gtnhlib.blockpos.BlockPos;
 import gregtech.common.propagation.PollutionManager;
 import net.minecraft.block.Block;
 import net.minecraft.block.material.Material;
@@ -424,6 +425,8 @@ public class Pollution {
      *         info about this chunk
      */
     public static int getPollution(World w, int chunkX, int chunkZ) {
+        return (int) getPropagationManager(w).sample(new BlockPos(chunkX * 16, 70, chunkZ * 16));
+        /*
         if (!GTMod.proxy.mPollution) return 0;
         if (w.isRemote) {
             // it really should be querying the client side stuff instead
@@ -431,6 +434,8 @@ public class Pollution {
         }
         return STORAGE.get(w, chunkX, chunkZ)
             .getAmount();
+
+         */
     }
 
     public static boolean hasPollution(Chunk ch) {
