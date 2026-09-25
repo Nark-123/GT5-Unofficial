@@ -1,72 +1,184 @@
-GT5-Unofficial
-===
+# GT5U Pollution Propagation Rework
 
-## About
+Experimental rework of the pollution propagation system for **GT5-Unofficial / GT New Horizons**.
 
-GT5-Unofficial is a decompiled and modified version of GT5.07.07. The goal of the mod is to maintain and extend the end
-game of GT5. This version has been heavily modified for use with the GTNH modpack.
+The current development stage is focused primarily on replacing the old chunk-based pollution propagation with a continuous spatial model.
 
-## Downloads
+> **Status:** Work in progress.
+> Core propagation and persistence are functional, while synchronization, migration, performance, and propagation extensions are still being developed.
 
-Builds can be found on the [GTNH Jenkins Server](http://jenkins.usrv.eu:8080/job/Gregtech-5-Unofficial/).
+---
 
-## Installation
+## Overview
 
-GT5U requires IndustrialCraft2-experimental. Version 2:2.2.828-experimental is recommended.
-Forge versions 1428-1480 are known to break multiplayer. 1614 is recommended.
-Place the downloaded jar file into your mods/ folder. A number of other mods may be required, see dependencies.gradle
+The original system stores pollution per chunk and spreads it between neighboring chunks.
 
-## Issues
+This rework instead models pollution as a spatial field that can be sampled at an actual world position.
 
-Please report any issues you to find to the main GTNH issue tracker. Include as much information as possible including
-as version and steps to reproduce.
-
-## Contribution
-
-Please do! However, please take a note of
-[current issues](https://github.com/GTNewHorizons/GT-New-Horizons-Modpack/issues) and what is currently being worked on.
-
-You don't need to clone the repository with full history to contribute, to save disk space and bandwidth you can clone:
-```bash
-git clone --depth 3 https://github.com/GTNewHorizons/GT5-Unofficial.git GT5-Unofficial
-```
-This way you'll get the last 3 commits of history in your local checkout, instead of all of it.
-
-It is suggested to run `./gradlew build` inside your cloned repository before importing it to your IDE. This will reduce
-the chance of strange errors.
-
-## Attribution
-
-Some textures/ideas have been taken from future versions of GT and texture pack authors for GTNH. Credit goes to Jimbno for the UU-Tex texture pack and its contributions to the base pack here: https://github.com/Jimbno/UU-Tex.
-Many sound effects were backported from the GregTech Community Edition Unofficial / Modern team: https://github.com/GregTechCEu/
-
-Credit to [EtVitki](https://linktr.ee/ekvitki) for the Spacetime material textures, adapted from their [original work.](https://www.reddit.com/r/PixelArt/comments/e1j9yt/i_need_some_space/)
-
-## Music duration metadata
-
-The electric jukebox requires duration metadata to specify how many milliseconds each disk plays for.
-These can be included in mods' jar resources under `soundmeta/durations.json`, or in the pack config directory at `config/soundmeta/durations.json`.
-The format is a simple key-value map of sound IDs mapping to millisecond counts, and can be generated from the client automatically using `/gt dump_music_durations`.
-
-```json
-{
-  "soundDurationsMs": {
-    "minecraft:11": 71112,
-    "minecraft:13": 178086,
-    "minecraft:blocks": 345914
-  }
-}
+```text
+PropagationSource
+      ↓
+PollutionEmitter
+      ↓
+PropagationSpatialIndex
+      ↓
+PollutionManager.sample(position)
 ```
 
-## License
+This removes hard chunk boundaries from the propagation model and allows pollution to vary across X, Y, and Z.
 
-GT5-Unofficial is free software: you can redistribute it and/or modify it under the terms of the
-GNU Lesser General Public License as published by the Free Software Foundation, either version 3
-of the License, or (at your option) any later version.
+---
 
-GT5-Unofficial is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
-without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-See the GNU Lesser General Public License for more details.
+## Propagation sources
 
-You should have received a copy of the GNU Lesser General Public License along with GT5-Unofficial.
-If not, see <http://www.gnu.org/licenses/>.
+`PropagationSource` represents something that produces pollution.
+
+### `PollutionSource`
+
+A persistent source intended for machines and other continuous pollution producers.
+
+The current muffler integration uses this path instead of directly modifying chunk pollution.
+
+### `PollutionBurstSource`
+
+A one-shot source used for instant pollution additions and compatibility with existing APIs or legacy data.
+
+After its emission is consumed, the source becomes invalid.
+
+---
+
+## PollutionEmitter
+
+`PollutionEmitter` stores accumulated pollution and produces a spatial pollution field.
+
+Its current responsibilities include:
+
+- collecting emissions from sources;
+- storing pollution;
+- applying decay;
+- calculating spatial influence;
+- interacting with propagation modifiers;
+- exposing persistent state.
+
+The current field uses a Gaussian-like falloff.
+
+![Current PollutionEmitter field](docs/Gaussian-like_field_example.png)
+
+*Example top-down projection. The shown parameters are illustrative rather than final.*
+
+Pollution intensity is highest near the emitter and decreases smoothly with distance.
+
+Field parameters, propagation distances, decay values, and other numeric constants are currently provisional.
+
+---
+
+## Spatial sampling
+
+Pollution can be queried directly at a position:
+
+```java
+pollutionManager.sample(position);
+```
+
+Only emitters capable of affecting that position are evaluated.
+
+`PropagationSpatialIndex` is used to avoid scanning every emitter in the dimension for every sample.
+
+---
+
+## PropagationInfluencer
+
+`PropagationInfluencer` represents something that modifies an existing pollution field without producing pollution itself.
+
+Possible future uses include:
+
+- fans;
+- ventilation;
+- airflow;
+- other propagation modifiers.
+
+No final gameplay implementation exists yet.
+
+---
+
+## Persistence and migration
+
+Emitter state is persisted through `WorldSavedData`.
+
+Persistent emitters are reconstructed when the world is loaded and registered back into the spatial index.
+
+Existing chunk-based pollution data can also be migrated into the new propagation system.
+
+Migration of the existing `GTChunkAssociatedData` format has been tested, including prevention of repeated imports after world reloads.
+
+Older `GTPOLLUTION` chunk NBT compatibility still requires additional testing.
+
+---
+
+## Client synchronization
+
+The authoritative propagation simulation currently runs on the server.
+
+For compatibility with the existing client pollution renderer, the server temporarily converts samples from the new field into legacy chunk pollution packets.
+
+The planned direction is to synchronize emitter state directly to the client and use the same spatial sampling implementation there.
+
+---
+
+## Current state
+
+### Implemented / tested
+
+- [x] Persistent pollution sources
+- [x] One-shot pollution sources
+- [x] Spatial pollution emitters
+- [x] Continuous 3D sampling
+- [x] Gaussian-like falloff
+- [x] Spatial indexing
+- [x] Pollution accumulation and decay
+- [x] Muffler integration
+- [x] Server-side persistence
+- [x] Persistence across full restart
+- [x] Legacy `GTChunkAssociatedData` migration
+
+### Still in development
+
+- [ ] Emitter update scheduling
+- [ ] Source lifecycle edge cases
+- [ ] Long-term decay behavior
+- [ ] Older `GTPOLLUTION` migration
+- [ ] Client synchronization
+- [ ] Performance with many active emitters
+
+### Planned
+
+- [ ] Direct emitter synchronization to clients
+- [ ] Client-side spatial sampling
+- [ ] Removal of legacy chunk pollution networking
+- [ ] `PropagationInfluencer` implementations
+- [ ] Directional airflow
+- [ ] Additional emitter types and field shapes
+- [ ] Pollution sinks / filtering
+
+---
+
+## Current focus
+
+The current development focus is the propagation layer itself:
+
+- sources;
+- emitters;
+- spatial sampling;
+- persistence;
+- synchronization;
+- performance.
+
+The goal is to build a propagation system that is continuous, three-dimensional, extensible, persistent, and scalable enough for normal gameplay.
+
+---
+
+## Upstream
+
+Based on **GTNewHorizons / GT5-Unofficial**.
+
+The current work replaces the chunk-oriented pollution propagation layer while retaining compatibility with surrounding GT5U systems during development.
