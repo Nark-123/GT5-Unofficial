@@ -75,8 +75,14 @@ public class Pollution {
      * ZPM (89%), UV (92%), MAX (95%)
      */
     // chunks left to process in this cycle
+    private List<ChunkCoordIntPair> pollutionList = new ArrayList<>();
     // a global list of all chunks with positive pollution
+    private final Set<ChunkCoordIntPair> pollutedChunks = new HashSet<>();
+    private int operationsPerTick = 0; // how much chunks should be processed in each cycle
+    private static final short cycleLen = 1200;
     private final World world;
+    private boolean blank = true;
+    public static int mPlayerPollution;
     private final PollutionManager propagationManager;
     private static final int SMOG_THRESHOLD = 1;
     private static final double POISON_THRESHOLD = 1.5D;
