@@ -4,6 +4,7 @@ import static gregtech.api.enums.Textures.BlockIcons.OVERLAY_MUFFLER;
 import static gregtech.api.objects.XSTR.XSTR_INSTANCE;
 
 import net.minecraft.item.ItemStack;
+import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.StatCollector;
 import net.minecraft.world.World;
 import net.minecraftforge.common.util.ForgeDirection;
@@ -204,12 +205,13 @@ public class MTEHatchMuffler extends MTEHatch {
             return false;
         }
 
-        getOrCreatePropagationSource().addPollution((double) pollutionAmount);
-
         int emittedPollution = calculatePollutionReduction(pollutionAmount);
 
-        Pollution.addPollution(getBaseMetaTileEntity(), emittedPollution);
+        getOrCreatePropagationSource().addPollution((double) emittedPollution);
 
+        if (emittedPollution > 0) {
+            Pollution.polluteCleanroom((TileEntity) getBaseMetaTileEntity());
+        }
         return true;
     }
 
@@ -224,7 +226,18 @@ public class MTEHatchMuffler extends MTEHatch {
         return pollutionSource;
     }
 
+    @Override
+    public void onRemoval() {
+        removeSource();
+        super.onRemoval();
+    }
+
     public void removeSource() {
+        if (pollutionSource == null) {
+            return;
+        }
+
         pollutionSource.remove();
+        pollutionSource = null;
     }
 }

@@ -16,15 +16,11 @@ public class PollutionEmitter {
     private final Vec3 center;
     private final List<PropagationSource> sources = new ArrayList<>();
     private final double smoothing;
-    private final double pollutionThreshold;
     private long lastCheckTick = -1L;
     private double pollution;
-    // Last published state
-    private double publishedPollution;
-    private boolean published;
     private final List<PropagationInfluencer> influencers = new ArrayList<>();
     private static final double GAUSSIAN_3_SIGMA_MASS = 0.9707091135D;
-    private double basePropagationRange;
+    private final double basePropagationRange;
     private double rangeMultiplier = 1.0D;
     private double effectiveRange;
     private double inverseRangeSquared;
@@ -35,8 +31,7 @@ public class PollutionEmitter {
             dimension,
             cellPosition,
             propagationRange,
-            DEFAULT_SMOOTHING,
-            DEFAULT_POLLUTION_THRESHOLD
+            DEFAULT_SMOOTHING
         );
     }
 
@@ -44,13 +39,11 @@ public class PollutionEmitter {
         int dimension,
         Vec3 cellPosition,
         double propagationRange,
-        double smoothing,
-        double pollutionThreshold
+        double smoothing
     ) {
         this.dimension = dimension;
         this.cellPosition = cellPosition;
         this.smoothing = smoothing;
-        this.pollutionThreshold = pollutionThreshold;
         this.center = getCellCenter(cellPosition);
         this.basePropagationRange = propagationRange;
         recalculatePropagationRange();
@@ -103,18 +96,16 @@ public class PollutionEmitter {
 
             double emission = source.consumeEmission();
 
-            if (emission <= 0.0D) {
+            if (emission == 0.0D) {
                 continue;
             }
 
             incomingPollution += emission;
         }
 
-        pollution += incomingPollution;
+        pollution = Math.max(0.0D, pollution + incomingPollution);
 
-        if (currentTick % (1200) == 0) {
-            pollution *= smoothing;
-        }
+        pollution *= smoothing;
 
         if (pollution < 1.0E-9D) {
             pollution = 0.0D;
@@ -221,6 +212,10 @@ public class PollutionEmitter {
         return center;
     }
 
+    public Vec3 getCellPosition() {
+        return cellPosition;
+    }
+
     public double getPropagationRange() {
         return effectiveRange;
     }
@@ -247,6 +242,10 @@ public class PollutionEmitter {
 
     public double getPollution() {
         return pollution;
+    }
+
+    public void setPollution(double pollution) {
+        this.pollution = Math.max(0.0D, pollution);
     }
 
     public Vec3 getCenter() {
