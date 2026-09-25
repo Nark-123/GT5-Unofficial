@@ -2,6 +2,8 @@ package gregtech.common.propagation;
 
 import com.gtnewhorizon.gtnhlib.blockpos.BlockPos;
 import net.minecraft.util.Vec3;
+import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.nbt.NBTTagList;
 
 import java.util.*;
 
@@ -15,6 +17,7 @@ public class PollutionManager implements PropagationManager {
     private int updateCursor;
     private int influencerUpdateCursor;
     private final int dimension;
+
 
     private static final Comparator<Vec3> CELL_COMPARATOR = new Comparator<Vec3>() {
         @Override
@@ -79,6 +82,11 @@ public class PollutionManager implements PropagationManager {
     public void unregisterEmitter(PollutionEmitter emitter) {
         emitters.remove(emitter);
         spatialIndex.remove(emitter);
+        pollutionEmitters.remove(emitter.getCellPosition());
+    }
+
+    public List<PollutionEmitter> getEmitters() {
+        return Collections.unmodifiableList(emitters);
     }
 
     @Override
@@ -174,6 +182,59 @@ public class PollutionManager implements PropagationManager {
             }
 
             influencerUpdateCursor++;
+        }
+    }
+
+    public NBTTagCompound writeToNBT(NBTTagCompound nbt) {
+        NBTTagList emitterList = new NBTTagList();
+
+        for (PollutionEmitter emitter : emitters) {
+            double pollution = emitter.getPollution();
+
+            if (pollution <= 0.0D) {
+                continue;
+            }
+
+            Vec3 cell = emitter.getCellPosition();
+
+            NBTTagCompound emitterTag = new NBTTagCompound();
+            emitterTag.setInteger("CellX", (int) cell.xCoord);
+            emitterTag.setInteger("CellY", (int) cell.yCoord);
+            emitterTag.setInteger("CellZ", (int) cell.zCoord);
+            emitterTag.setDouble("Pollution", pollution);
+
+            emitterList.appendTag(emitterTag);
+        }
+
+        nbt.setTag("Emitters", emitterList);
+        return nbt;
+    }
+
+    public void readFromNBT(NBTTagCompound nbt) {
+        NBTTagList emitterList = nbt.getTagList("Emitters", 10);
+
+        for (int i = 0; i < emitterList.tagCount(); i++) {
+            NBTTagCompound emitterTag = emitterList.getCompoundTagAt(i);
+
+            Vec3 cellPosition = Vec3.createVectorHelper(
+                emitterTag.getInteger("CellX"),
+                emitterTag.getInteger("CellY"),
+                emitterTag.getInteger("CellZ")
+            );
+
+            double pollution = emitterTag.getDouble("Pollution");
+
+            if (pollution <= 0.0D) {
+                continue;
+            }
+
+            PollutionEmitter emitter =
+                new PollutionEmitter(dimension, cellPosition, 256);
+
+            emitter.setPollution(pollution);
+
+            pollutionEmitters.put(cellPosition, emitter);
+            registerEmitter(emitter);
         }
     }
 

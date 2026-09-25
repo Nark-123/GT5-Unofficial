@@ -5,17 +5,15 @@ import static gregtech.api.objects.XSTR.XSTR_INSTANCE;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
-import java.util.function.Consumer;
 
-import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
 
 import com.gtnewhorizon.gtnhlib.blockpos.BlockPos;
+import gregtech.common.propagation.PollutionBurstSource;
+import gregtech.common.propagation.PollutionEmitter;
 import gregtech.common.propagation.PollutionManager;
+import gregtech.common.propagation.PollutionSavedData;
 import net.minecraft.block.Block;
 import net.minecraft.block.material.Material;
 import net.minecraft.entity.EntityLivingBase;
@@ -24,11 +22,13 @@ import net.minecraft.init.Blocks;
 import net.minecraft.potion.Potion;
 import net.minecraft.potion.PotionEffect;
 import net.minecraft.tileentity.TileEntity;
-import net.minecraft.util.AxisAlignedBB;
+import net.minecraft.util.Vec3;
 import net.minecraft.world.ChunkCoordIntPair;
+import net.minecraft.util.MathHelper;
 import net.minecraft.world.World;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.event.entity.living.LivingEvent;
 import net.minecraftforge.event.world.ChunkDataEvent;
 import net.minecraftforge.event.world.ChunkWatchEvent;
 import net.minecraftforge.event.world.WorldEvent;
@@ -37,7 +37,6 @@ import com.gtnewhorizon.gtnhlib.capability.Capabilities;
 
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.gameevent.TickEvent;
-import cpw.mods.fml.common.network.NetworkRegistry;
 import gregtech.GTMod;
 import gregtech.api.enums.GTValues;
 import gregtech.api.hazards.HazardProtection;
@@ -76,16 +75,14 @@ public class Pollution {
      * ZPM (89%), UV (92%), MAX (95%)
      */
     // chunks left to process in this cycle
-    private List<ChunkCoordIntPair> pollutionList = new ArrayList<>();
     // a global list of all chunks with positive pollution
-    private final Set<ChunkCoordIntPair> pollutedChunks = new HashSet<>();
-    private int operationsPerTick = 0; // how much chunks should be processed in each cycle
-    private static final short cycleLen = 1200;
     private final World world;
-    private boolean blank = true;
-    public static int mPlayerPollution;
     private final PollutionManager propagationManager;
-    private static final int POLLUTIONPACKET_MINVALUE = 1000;
+    private static final int SMOG_THRESHOLD = 1;
+    private static final double POISON_THRESHOLD = 1.5D;
+    private static final double VEGETATION_THRESHOLD = 2.0D;
+    private static final double SOUR_RAIN_THRESHOLD = 3;
+    private static final double CLIENT_POLLUTION_SCALE = 500_000.0D;
 
     private static GT_PollutionEventHandler EVENT_HANDLER;
 
@@ -93,10 +90,46 @@ public class Pollution {
         this.world = world;
         this.propagationManager = new PollutionManager(world.provider.dimensionId);
 
+        if (!world.isRemote) {
+            PollutionSavedData.get(world).loadInto(propagationManager);
+        }
+
         if (EVENT_HANDLER == null) {
             EVENT_HANDLER = new GT_PollutionEventHandler();
             MinecraftForge.EVENT_BUS.register(EVENT_HANDLER);
         }
+    }
+
+    private void syncPlayerPollution() {
+        for (Object obj : world.playerEntities) {
+            if (!(obj instanceof EntityPlayerMP)) continue;
+
+            EntityPlayerMP player = (EntityPlayerMP) obj;
+
+            int baseChunkX = (MathHelper.floor_double(player.posX) - 8) >> 4;
+            int baseChunkZ = (MathHelper.floor_double(player.posZ) - 8) >> 4;
+
+            syncChunkPollution(player, baseChunkX, baseChunkZ);
+            syncChunkPollution(player, baseChunkX + 1, baseChunkZ);
+            syncChunkPollution(player, baseChunkX, baseChunkZ + 1);
+            syncChunkPollution(player, baseChunkX + 1, baseChunkZ + 1);
+        }
+    }
+
+    private void syncChunkPollution(EntityPlayerMP player, int chunkX, int chunkZ) {
+        double pollution = getPollution(world,(chunkX << 4) + 8, (int) player.posY, (chunkZ << 4) + 8);
+
+        int clientPollution = GTUtility.safeInt(
+            Math.round(pollution * CLIENT_POLLUTION_SCALE)
+        );
+
+        GTValues.NW.sendToPlayer(
+            new GTPacketPollution(
+                new ChunkCoordIntPair(chunkX, chunkZ),
+                clientPollution
+            ),
+            player
+        );
     }
 
     public static PollutionManager getPropagationManager(World world) {
@@ -105,15 +138,23 @@ public class Pollution {
 
     public static void onWorldTick(TickEvent.WorldTickEvent aEvent) { // called from proxy
         // return if pollution disabled
+        if (aEvent.world.isRemote) return;
         if (!GTMod.proxy.mPollution) return;
         if (aEvent.phase == TickEvent.Phase.START) return;
+
         final Pollution pollutionInstance = GTMod.proxy.dimensionWisePollution.get(aEvent.world.provider.dimensionId);
+
         if (pollutionInstance == null) return;
-        pollutionInstance.tickPollutionInWorld((int) (aEvent.world.getTotalWorldTime() % cycleLen));
 
         pollutionInstance.propagationManager.tick(
             (int) aEvent.world.getTotalWorldTime()
         );
+
+        if (aEvent.world.getTotalWorldTime() % 20 == 0) {
+            PollutionSavedData.get(aEvent.world).markDirty();
+            pollutionInstance.tickVegetation();
+            pollutionInstance.syncPlayerPollution();
+        }
     }
 
     public static BlockMatcher standardBlocks;
@@ -143,145 +184,32 @@ public class Pollution {
         }
     }
 
-    private void tickPollutionInWorld(int aTickID) { // called from method above
-        // gen data set
-        if (aTickID == 0 || blank) {
-            // make a snapshot of what to work on
-            pollutionList = new ArrayList<>(pollutedChunks);
-            // set operations per tick
-            if (!pollutionList.isEmpty()) operationsPerTick = Math.max(1, pollutionList.size() / cycleLen);
-            else operationsPerTick = 0; // SANity
-            blank = false;
+    private void tickVegetation() {
+        List<PollutionEmitter> emitters = propagationManager.getEmitters();
+
+        if (emitters.isEmpty()) {
+            return;
         }
 
-        for (int chunksProcessed = 0; chunksProcessed < operationsPerTick; chunksProcessed++) {
-            if (pollutionList.isEmpty()) break; // no more stuff to do
-            ChunkCoordIntPair actualPos = pollutionList.remove(pollutionList.size() - 1); // faster
-            // get pollution
-            ChunkData currentData = STORAGE.get(world, actualPos);
-            int tPollution = currentData.getAmount();
-            // remove some
-            tPollution = (int) (0.9945f * tPollution);
+        PollutionEmitter emitter = emitters.get(XSTR_INSTANCE.nextInt(emitters.size()));
+        Vec3 center = emitter.getPosition();
+        double range = emitter.getPropagationRange();
 
-            if (tPollution > 400000) { // Spread Pollution
+        int x = (int) Math.floor(center.xCoord + (XSTR_INSTANCE.nextDouble() * 2.0D - 1.0D) * range);
+        int z = (int) Math.floor(center.zCoord + (XSTR_INSTANCE.nextDouble() * 2.0D - 1.0D) * range);
+        int y = world.getHeightValue(x, z) - 1;
 
-                ChunkCoordIntPair[] tNeighbors = new ChunkCoordIntPair[4]; // array is faster
-                tNeighbors[0] = (new ChunkCoordIntPair(actualPos.chunkXPos + 1, actualPos.chunkZPos));
-                tNeighbors[1] = (new ChunkCoordIntPair(actualPos.chunkXPos - 1, actualPos.chunkZPos));
-                tNeighbors[2] = (new ChunkCoordIntPair(actualPos.chunkXPos, actualPos.chunkZPos + 1));
-                tNeighbors[3] = (new ChunkCoordIntPair(actualPos.chunkXPos, actualPos.chunkZPos - 1));
-                for (ChunkCoordIntPair neighborPosition : tNeighbors) {
-                    ChunkData neighbor = STORAGE.get(world, neighborPosition);
-                    int neighborPollution = neighbor.getAmount();
-                    if (neighborPollution * 6 < tPollution * 5) { // MATHEMATICS...
-                        int tDiff = tPollution - neighborPollution;
-                        tDiff = tDiff / 20;
-                        neighborPollution = GTUtility.safeInt((long) neighborPollution + tDiff); // tNPol += tDiff;
-                        tPollution -= tDiff;
-                        setChunkPollution(neighborPosition, neighborPollution);
-                    }
-                }
-
-                // Create Pollution effects
-                // Smog filter TODO
-                if (tPollution > GTMod.proxy.mPollutionSmogLimit) {
-                    AxisAlignedBB chunk = AxisAlignedBB.getBoundingBox(
-                        actualPos.chunkXPos << 4,
-                        0,
-                        actualPos.chunkZPos << 4,
-                        (actualPos.chunkXPos << 4) + 16,
-                        256,
-                        (actualPos.chunkZPos << 4) + 16);
-                    List<EntityLivingBase> tEntitys = world.getEntitiesWithinAABB(EntityLivingBase.class, chunk);
-                    for (EntityLivingBase tEnt : tEntitys) {
-                        if (tEnt instanceof EntityPlayerMP && ((EntityPlayerMP) tEnt).capabilities.isCreativeMode)
-                            continue;
-                        if (!(HazardProtection.isWearingFullGasHazmat(tEnt))) {
-                            switch (XSTR_INSTANCE.nextInt(3)) {
-                                case 1:
-                                    tEnt.addPotionEffect(
-                                        new PotionEffect(
-                                            Potion.weakness.id,
-                                            Math.min(tPollution / 1000, 1000),
-                                            tPollution / 400000));
-                                case 2:
-                                    tEnt.addPotionEffect(
-                                        new PotionEffect(
-                                            Potion.moveSlowdown.id,
-                                            Math.min(tPollution / 1000, 1000),
-                                            tPollution / 400000));
-                                default:
-                                    tEnt.addPotionEffect(
-                                        new PotionEffect(
-                                            Potion.digSlowdown.id,
-                                            Math.min(tPollution / 1000, 1000),
-                                            tPollution / 400000));
-                            }
-                        }
-                    }
-
-                    // Poison effects
-                    if (tPollution > GTMod.proxy.mPollutionPoisonLimit) {
-                        for (EntityLivingBase tEnt : tEntitys) {
-                            if (tEnt instanceof EntityPlayerMP && ((EntityPlayerMP) tEnt).capabilities.isCreativeMode)
-                                continue;
-                            if (!HazardProtection.isWearingFullGasHazmat(tEnt)) {
-                                switch (XSTR_INSTANCE.nextInt(4)) {
-                                    case 1:
-                                        tEnt.addPotionEffect(
-                                            new PotionEffect(
-                                                Potion.confusion.id,
-                                                Math.min(tPollution / 2000, 1000),
-                                                1));
-                                    case 2:
-                                        tEnt.addPotionEffect(
-                                            new PotionEffect(
-                                                Potion.poison.id,
-                                                Math.min(tPollution / 4000, 1000),
-                                                tPollution / 500000));
-                                    case 3:
-                                        tEnt.addPotionEffect(
-                                            new PotionEffect(
-                                                Potion.blindness.id,
-                                                Math.min(tPollution / 2000, 1000),
-                                                1));
-                                    default:
-                                        tEnt.addPotionEffect(new PotionEffect(Potion.hunger.id, tPollution / 500000));
-                                }
-                            }
-                        }
-
-                        // killing plants
-                        if (tPollution > GTMod.proxy.mPollutionVegetationLimit) {
-                            int f = 20;
-                            for (; f < (tPollution / 25000); f++) {
-                                int x = (actualPos.chunkXPos << 4) + XSTR_INSTANCE.nextInt(16);
-                                int y = 60 + (-f + XSTR_INSTANCE.nextInt(f * 2 + 1));
-                                int z = (actualPos.chunkZPos << 4) + XSTR_INSTANCE.nextInt(16);
-                                damageBlock(world, x, y, z, tPollution > GTMod.proxy.mPollutionSourRainLimit);
-                            }
-                        }
-                    }
-                }
-            }
-            // Write new pollution to Hashmap !!!
-            setChunkPollution(actualPos, tPollution);
-
-            // Send new value to players nearby
-            if (tPollution > POLLUTIONPACKET_MINVALUE) {
-                NetworkRegistry.TargetPoint point = new NetworkRegistry.TargetPoint(
-                    world.provider.dimensionId,
-                    (actualPos.chunkXPos << 4),
-                    64,
-                    (actualPos.chunkZPos << 4),
-                    256);
-                GTValues.NW.sendToAllAround(new GTPacketPollution(actualPos, tPollution), point);
-            }
+        if (y < 0) {
+            return;
         }
-    }
 
-    private void setChunkPollution(ChunkCoordIntPair coord, int pollution) {
-        mutatePollution(world, coord.chunkXPos, coord.chunkZPos, c -> c.setAmount(pollution), pollutedChunks);
+        double pollution = getPollution(world, x, y, z);
+
+        if (pollution < VEGETATION_THRESHOLD) {
+            return;
+        }
+
+        damageBlock(world, x, y, z,pollution >= SOUR_RAIN_THRESHOLD);
     }
 
     private static void damageBlock(World world, int x, int y, int z, boolean sourRain) {
@@ -358,19 +286,27 @@ public class Pollution {
      * @see #addPollution(World, int, int, int)
      */
     public static void addPollution(TileEntity te, int aPollution) {
-        if (!GTMod.proxy.mPollution || aPollution == 0 || te.getWorldObj().isRemote) return;
-
-        if (aPollution > 0) {
-            ICleanroomReceiver receiver = Capabilities.getCapability(te, ICleanroomReceiver.class);
-            if (receiver != null) {
-                ICleanroom cleanroom = receiver.getCleanroom();
-                if (cleanroom != null && cleanroom.isValidCleanroom()) {
-                    cleanroom.pollute();
-                }
-            }
+        if (!GTMod.proxy.mPollution || aPollution == 0 || te.getWorldObj().isRemote) {
+            return;
         }
 
-        addPollution(te.getWorldObj(), te.xCoord >> 4, te.zCoord >> 4, aPollution);
+        if (aPollution > 0) {
+            polluteCleanroom(te);
+        }
+
+        World world = te.getWorldObj();
+
+        getPropagationManager(world).registerSource(
+            new PollutionBurstSource(
+                world.provider.dimensionId,
+                Vec3.createVectorHelper(
+                    te.xCoord,
+                    te.yCoord,
+                    te.zCoord
+                ),
+                aPollution
+            )
+        );
     }
 
     /** @see #addPollution(World, int, int, int) */
@@ -389,20 +325,20 @@ public class Pollution {
      */
     public static void addPollution(World w, int chunkX, int chunkZ, int aPollution) {
         if (!GTMod.proxy.mPollution || aPollution == 0 || w.isRemote) return;
-        mutatePollution(w, chunkX, chunkZ, d -> d.changeAmount(aPollution), null);
-    }
 
-    private static void mutatePollution(World world, int x, int z, Consumer<ChunkData> mutator,
-        @Nullable Set<ChunkCoordIntPair> chunks) {
-        ChunkData data = STORAGE.get(world, x, z);
-        boolean hadPollution = data.getAmount() > 0;
-        mutator.accept(data);
-        boolean hasPollution = data.getAmount() > 0;
-        if (hasPollution != hadPollution) {
-            if (chunks == null) chunks = getPollutionManager(world).pollutedChunks;
-            if (hasPollution) chunks.add(new ChunkCoordIntPair(x, z));
-            else chunks.remove(new ChunkCoordIntPair(x, z));
-        }
+        Vec3 position = Vec3.createVectorHelper(
+            (chunkX << 4) + 8,
+            70,
+            (chunkZ << 4) + 8
+        );
+
+        getPropagationManager(w).registerSource(
+            new PollutionBurstSource(
+                w.provider.dimensionId,
+                position,
+                aPollution
+            )
+        );
     }
 
     /** @see #getPollution(World, int, int) */
@@ -415,40 +351,81 @@ public class Pollution {
         return getPollution(ch.worldObj, ch.xPosition, ch.zPosition);
     }
 
+    public static void polluteCleanroom(TileEntity te) {
+        if (!GTMod.proxy.mPollution || te.getWorldObj().isRemote) return;
+
+        ICleanroomReceiver receiver =
+            Capabilities.getCapability(te, ICleanroomReceiver.class);
+
+        if (receiver == null) return;
+
+        ICleanroom cleanroom = receiver.getCleanroom();
+
+        if (cleanroom != null && cleanroom.isValidCleanroom()) {
+            cleanroom.pollute();
+        }
+    }
+
     /**
      * Get the pollution in specified chunk
      *
-     * @param w      world to look in. can be a client world, but that limits the knowledge to what server side send us
+     * @param world  world to look in. can be a client world, but that limits the knowledge to what server side send us
      * @param chunkX chunk coordinate X, i.e. blockX >> 4
      * @param chunkZ chunk coordinate Z, i.e. blockZ >> 4
      * @return pollution amount. may be 0 if pollution is disabled, or if it's a client world and server did not send us
      *         info about this chunk
      */
-    public static int getPollution(World w, int chunkX, int chunkZ) {
-        return (int) getPropagationManager(w).sample(new BlockPos(chunkX * 16, 70, chunkZ * 16));
-        /*
+    public static int getPollution(World world, int chunkX, int chunkZ) {
         if (!GTMod.proxy.mPollution) return 0;
-        if (w.isRemote) {
-            // it really should be querying the client side stuff instead
-            return GTMod.clientProxy().mPollutionRenderer.getKnownPollution(chunkX << 4, chunkZ << 4);
-        }
-        return STORAGE.get(w, chunkX, chunkZ)
-            .getAmount();
 
-         */
+        if (world.isRemote) {
+            return GTMod.clientProxy().mPollutionRenderer
+                .getKnownPollution(chunkX << 4, chunkZ << 4);
+        }
+
+        double pollution = getPollution(
+            world,
+            (chunkX << 4) + 8,
+            70,
+            (chunkZ << 4) + 8
+        );
+
+        return GTUtility.safeInt(
+            Math.round(pollution * CLIENT_POLLUTION_SCALE)
+        );
+    }
+
+    public static int getPollution(World world, int x, int y, int z) {
+        return (int) getPropagationManager(world).sample(new BlockPos(x, y, z ));
     }
 
     public static boolean hasPollution(Chunk ch) {
         if (!GTMod.proxy.mPollution) return false;
-        return STORAGE.isCreated(ch.worldObj, ch.getChunkCoordIntPair()) && STORAGE.get(ch)
-            .getAmount() > 0;
+
+        if (ch.worldObj.isRemote) {
+            return getPollution(ch) > 0;
+        }
+
+        return getPollution(
+            ch.worldObj,
+            (ch.xPosition << 4) + 8,
+            70,
+            (ch.zPosition << 4) + 8
+        ) >= 1.0D;
     }
 
     public static void migrate(ChunkDataEvent.Load e) {
-        addPollution(
-            e.getChunk(),
-            e.getData()
-                .getInteger("GTPOLLUTION"));
+        if (!e.getData().hasKey("GTPOLLUTION")) {
+            return;
+        }
+
+        int pollution = e.getData().getInteger("GTPOLLUTION");
+
+        e.getData().removeTag("GTPOLLUTION");
+
+        if (pollution > 0) {
+            addPollution(e.getChunk(), pollution);
+        }
     }
 
     public static class GT_PollutionEventHandler {
@@ -456,23 +433,100 @@ public class Pollution {
         @SubscribeEvent
         public void chunkWatch(ChunkWatchEvent.Watch event) {
             if (!GTMod.proxy.mPollution) return;
-            World world = event.player.worldObj;
-            if (STORAGE.isCreated(world, event.chunk)) {
-                int pollution = STORAGE.get(world, event.chunk)
-                    .getAmount();
-                if (pollution > POLLUTIONPACKET_MINVALUE)
-                    GTValues.NW.sendToPlayer(new GTPacketPollution(event.chunk, pollution), event.player);
+
+            Pollution pollution =
+                GTMod.proxy.dimensionWisePollution.get(event.player.worldObj.provider.dimensionId);
+
+            if (pollution == null) return;
+
+            pollution.syncChunkPollution(
+                event.player,
+                event.chunk.chunkXPos,
+                event.chunk.chunkZPos
+            );
+        }
+
+        @SubscribeEvent
+        public void onLivingUpdate(LivingEvent.LivingUpdateEvent event) {
+            EntityLivingBase entity = event.entityLiving;
+            World world = entity.worldObj;
+
+            if (world.isRemote) return;
+
+            if (!GTMod.proxy.mPollution) return;
+
+            if (entity.ticksExisted % 20 != 0) return;
+
+            double pollution = getPollution(
+                world,
+                (int) entity.posX,
+                (int) entity.posY,
+                (int) entity.posZ);
+
+            if (pollution >= SMOG_THRESHOLD) {
+                if (entity instanceof EntityPlayerMP
+                    && ((EntityPlayerMP) entity).capabilities.isCreativeMode) {
+                    return;
+                }
+
+                if (HazardProtection.isWearingFullGasHazmat(entity)) {
+                    return;
+                }
+
+                switch (XSTR_INSTANCE.nextInt(3)) {
+                    case 0:
+                        entity.addPotionEffect(
+                            new PotionEffect(Potion.weakness.id, 40, 0));
+                        break;
+
+                    case 1:
+                        entity.addPotionEffect(
+                            new PotionEffect(Potion.moveSlowdown.id, 40, 0));
+                        break;
+
+                    case 2:
+                        entity.addPotionEffect(
+                            new PotionEffect(Potion.digSlowdown.id, 40, 0));
+                        break;
+                }
+            }
+
+            if (pollution >= POISON_THRESHOLD) {
+                switch (XSTR_INSTANCE.nextInt(4)) {
+                    case 0:
+                        entity.addPotionEffect(
+                            new PotionEffect(Potion.confusion.id, 40, 0));
+                        break;
+
+                    case 1:
+                        entity.addPotionEffect(
+                            new PotionEffect(Potion.poison.id, 40, 0));
+                        break;
+
+                    case 2:
+                        entity.addPotionEffect(
+                            new PotionEffect(Potion.blindness.id, 40, 0));
+                        break;
+
+                    case 3:
+                        entity.addPotionEffect(
+                            new PotionEffect(Potion.hunger.id, 40, 0));
+                        break;
+                }
             }
         }
 
         @SubscribeEvent
         public void onWorldLoad(WorldEvent.Load e) {
-            // super class loads everything lazily. We force it to load them all.
-            if (!e.world.isRemote) STORAGE.loadAll(e.world);
+            if (e.world.isRemote) return;
+
+            getPollutionManager(e.world);
+            STORAGE.loadAll(e.world);
         }
 
         @SubscribeEvent
         public void onWorldUnload(WorldEvent.Unload e) {
+            if (e.world.isRemote) return;
             GTMod.proxy.dimensionWisePollution.remove(e.world.provider.dimensionId);
         }
     }
@@ -487,17 +541,31 @@ public class Pollution {
         @Override
         protected void writeElement(DataOutput output, ChunkData element, World world, int chunkX, int chunkZ)
             throws IOException {
-            output.writeInt(element.getAmount());
+            output.writeInt(element.migrationDirty ? 0 : element.getAmount());
+            element.migrationDirty = false;
         }
 
         @Override
-        protected ChunkData readElement(DataInput input, int version, World world, int chunkX, int chunkZ)
-            throws IOException {
-            if (version != 0) throw new IOException("Region file corrupted");
-            ChunkData data = new ChunkData(input.readInt());
-            if (data.getAmount() > 0)
-                getPollutionManager(world).pollutedChunks.add(new ChunkCoordIntPair(chunkX, chunkZ));
-            return data;
+        protected ChunkData readElement(
+            DataInput input,
+            int version,
+            World world,
+            int chunkX,
+            int chunkZ
+        ) throws IOException {
+            if (version != 0) {
+                throw new IOException("Region file corrupted");
+            }
+
+            int pollution = input.readInt();
+
+            if (pollution > 0) {
+                Pollution.addPollution(world, chunkX, chunkZ, pollution);
+
+                return new ChunkData(0, true);
+            }
+
+            return new ChunkData();
         }
 
         @Override
@@ -509,22 +577,23 @@ public class Pollution {
         public void loadAll(World w) {
             super.loadAll(w);
         }
-
-        public boolean isCreated(World world, ChunkCoordIntPair coord) {
-            return isCreated(world.provider.dimensionId, coord.chunkXPos, coord.chunkZPos);
-        }
     }
 
     private static final class ChunkData implements GTChunkAssociatedData.IData {
-
+        private boolean migrationDirty;
         public int amount;
 
         private ChunkData() {
-            this(0);
+            this(0, false);
         }
 
         private ChunkData(int amount) {
+            this(amount, false);
+        }
+
+        private ChunkData(int amount, boolean migrationDirty) {
             this.amount = Math.max(0, amount);
+            this.migrationDirty = migrationDirty;
         }
 
         /**
