@@ -348,7 +348,19 @@ public class PollutionManager implements PropagationManager {
         dirtyEmitters.remove(emitter);
     }
 
+    public void addPollution(int x, int y, int z, double pollution) {
+        Vec3 cell = getCellPosition(Vec3.createVectorHelper(x, y, z));
+        PollutionEmitter emitter = pollutionEmitters.get(cell);
 
+        if (emitter == null) {
+            emitter = new PollutionEmitter(dimension, cell, 256);
+            pollutionEmitters.put(cell, emitter);
+            registerEmitter(emitter);
+        }
+
+        emitter.setPollution(Math.max(0.0D, emitter.getPollution() + pollution));
+        dirtyEmitters.add(emitter);
+    }
 
     private boolean canInfluence(PollutionEmitter emitter, PropagationInfluencer influencer) {
         double range = emitter.getPropagationRange() + influencer.getRange();

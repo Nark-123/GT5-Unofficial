@@ -10,6 +10,7 @@ public class PollutionSavedData extends WorldSavedData {
     private static final String DATA_NAME = "GT_POLLUTION_PROPAGATION";
     private NBTTagCompound storedData = new NBTTagCompound();
     private PollutionManager manager;
+    private boolean legacyStorageMigrated;
 
     public PollutionSavedData(String name) {
         super(name);
@@ -34,6 +35,7 @@ public class PollutionSavedData extends WorldSavedData {
     @Override
     public void readFromNBT(NBTTagCompound nbt) {
         storedData = nbt.getCompoundTag("Pollution");
+        legacyStorageMigrated = nbt.getBoolean("LegacyStorageMigrated");
     }
 
     @Override
@@ -45,6 +47,18 @@ public class PollutionSavedData extends WorldSavedData {
         } else {
             nbt.setTag("Pollution", storedData);
         }
+        nbt.setBoolean("LegacyStorageMigrated", legacyStorageMigrated);
+    }
+
+    public boolean isLegacyStorageMigrated() {
+        return legacyStorageMigrated;
+    }
+
+    public void setLegacyStorageMigrated() {
+        if (legacyStorageMigrated) return;
+
+        legacyStorageMigrated = true;
+        markDirty();
     }
 
     public void loadInto(PollutionManager manager) {

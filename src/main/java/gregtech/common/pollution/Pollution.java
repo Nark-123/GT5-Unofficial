@@ -48,7 +48,7 @@ import gregtech.api.util.GTUtility;
 
 public class Pollution {
     // Legacy chunk pollution storage. Used only for one-time migration.
-    private static final Storage STORAGE = new Storage();
+    private static final LegacyStorage LEGACY_STORAGE = new LegacyStorage();
     private final World world;
     private final PollutionManager propagationManager;
     // TODO Rebalance pollution effect thresholds for the propagation model.
@@ -316,7 +316,7 @@ public class Pollution {
 
         if (pollutionInstance == null) {
             pollutionInstance = getPollutionManager(aEvent.world);
-            STORAGE.loadAll(aEvent.world);
+            LEGACY_STORAGE.migrateAll(aEvent.world);
         }
 
         pollutionInstance.propagationManager.tick();
@@ -589,7 +589,14 @@ public class Pollution {
         e.getChunk().setChunkModified();
 
         if (pollution > 0) {
-            addPollution(e.getChunk(), pollution);
+            Chunk chunk = e.getChunk();
+
+            getPropagationManager(chunk.worldObj).addPollution(
+                (chunk.xPosition << 4) + 8,
+                70,
+                (chunk.zPosition << 4) + 8,
+                pollution
+            );
         }
     }
 
@@ -671,8 +678,12 @@ public class Pollution {
 
             getPollutionManager(e.world);
 
-            STORAGE.loadAll(e.world);
-            STORAGE.save(e.world);
+            PollutionSavedData data = PollutionSavedData.get(e.world);
+
+            if (!data.isLegacyStorageMigrated()) {
+                LEGACY_STORAGE.migrateAll(e.world);
+                data.setLegacyStorageMigrated();
+            }
         }
 
         @SubscribeEvent
@@ -683,21 +694,20 @@ public class Pollution {
     }
 
     @ParametersAreNonnullByDefault
-    private static final class Storage extends GTChunkAssociatedData<ChunkData> {
+    private static final class LegacyStorage extends GTChunkAssociatedData<LegacyChunkData> {
 
-        private Storage() {
-            super("Pollution", ChunkData.class, 64, (byte) 0, false);
+        private LegacyStorage() {
+            super("Pollution", LegacyChunkData.class, 64, (byte) 0, false);
         }
 
         @Override
-        protected void writeElement(DataOutput output, ChunkData element,
+        protected void writeElement(DataOutput output, LegacyChunkData element,
                                     World world, int chunkX, int chunkZ) throws IOException {
             output.writeInt(0);
-            element.migrationDirty = false;
         }
 
         @Override
-        protected ChunkData readElement(
+        protected LegacyChunkData readElement(
             DataInput input,
             int version,
             World world,
@@ -711,37 +721,32 @@ public class Pollution {
             int pollution = input.readInt();
 
             if (pollution > 0) {
-                Pollution.addPollution(world, chunkX, chunkZ, pollution);
-                return new ChunkData(true);
+                getPropagationManager(world).addPollution(
+                    (chunkX << 4) + 8,
+                    70,
+                    (chunkZ << 4) + 8,
+                    pollution
+                );
             }
 
-            return new ChunkData();
+            return new LegacyChunkData();
         }
 
         @Override
-        protected ChunkData createElement(World world, int chunkX, int chunkZ) {
-            return new ChunkData();
+        protected LegacyChunkData createElement(World world, int chunkX, int chunkZ) {
+            return new LegacyChunkData();
         }
 
-        @Override
-        public void loadAll(World w) {
+        public void migrateAll(World w) {
             super.loadAll(w);
         }
     }
 
-    private static final class ChunkData implements GTChunkAssociatedData.IData {
-        // Keeps a migrated entry non-default until zero is written back to legacy storage.
-        private boolean migrationDirty;
-
-        private ChunkData() {}
-
-        private ChunkData(boolean migrationDirty) {
-            this.migrationDirty = migrationDirty;
-        }
+    private static final class LegacyChunkData implements GTChunkAssociatedData.IData {
 
         @Override
         public boolean isSameAsDefault() {
-            return !migrationDirty;
+            return true;
         }
     }
 }
