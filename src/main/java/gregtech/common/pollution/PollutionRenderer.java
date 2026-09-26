@@ -27,15 +27,14 @@ public class PollutionRenderer {
 
     private static final boolean DEBUG = false;
 
-    // PARTICLES_POLLUTION_START + PARTICLES_POLLUTION_END -> Max Particles
     private static final int PARTICLES_MAX_NUM = 100;
-    private static final int PARTICLES_POLLUTION_START = 400000;
-    private static final int PARTICLES_POLLUTION_END = 3500000;
     private static final int END_MAX_DISTANCE = 192 - 1;
 
-    private static final int FOG_START_AT_POLLUTION = 400000;
-    private static final int FOG_MAX_AT_POLLUTION = 7000000;
-    // jump from linear to exponential fog. x*FOG_MAX_AT_POLLUTION+FOG_START_AT_POLLUTION
+    private static final double PARTICLES_POLLUTION_START = 0.8D;
+    private static final double PARTICLES_POLLUTION_END = 7.0D;
+    private static final double FOG_START_AT_POLLUTION = 0.8D;
+    private static final double FOG_MAX_AT_POLLUTION = 14.0D;
+
     private static final double FOG_START_EXP_RATIO = 0.02D;
 
     private static final float[] FOG_COLOR = { 0.3f, 0.25f, 0.1f };
@@ -44,32 +43,22 @@ public class PollutionRenderer {
     private static final short[] LIQUID_COLOR = { 160, 200, 10 };
     private static final short[] FOLIAGE_COLOR = { 160, 80, 15 };
 
-    private final GTClientPollutionMap pollutionMap = new GTClientPollutionMap();
-    private int playerPollution = 0;
+    private double playerPollution;
     private double fogIntensityLastTick = 0;
 
     // TODO need to soft update some blocks, grass and leaves does more often than liquid it looks like.
 
-    public void processPacket(ChunkCoordIntPair chunk, int pollution) {
-        pollutionMap.addChunkPollution(chunk.chunkXPos, chunk.chunkZPos, pollution);
-    }
-
-    @SubscribeEvent(priority = EventPriority.HIGH)
-    public void onWorldUnload(WorldEvent.Unload event) {
-        if (event.world.isRemote) {
-            pollutionMap.needsRebuild();
-        }
-    }
-
-    private static int color(int color, int pollution, int low, float high, short[] colors) {
+    private static int color(int color, double pollution, double low, double high, short[] colors) {
         if (pollution < low) return color;
 
         int r = (color >> 16) & 0xFF;
         int g = (color >> 8) & 0xFF;
         int b = color & 0xFF;
-        float p = (pollution - low) / high;
-        if (p > 1) p = 1;
-        float pi = 1 - p;
+
+        double p = (pollution - low) / high;
+        if (p > 1.0D) p = 1.0D;
+
+        double pi = 1.0D - p;
 
         r = ((int) (r * pi + p * colors[0])) & 0xFF;
         g = ((int) (g * pi + p * colors[1])) & 0xFF;
@@ -79,23 +68,19 @@ public class PollutionRenderer {
     }
 
     public int colorGrass(int oColor, int x, int z) {
-        return color(oColor, pollutionMap.getPollution(x, z) / 1000, 350, 600, GRASS_COLOR);
+        return color(oColor, getPollution(x, z), 0.7D, 1.2D, GRASS_COLOR);
     }
 
     public int colorLeaves(int oColor, int x, int z) {
-        return color(oColor, pollutionMap.getPollution(x, z) / 1000, 300, 500, LEAVES_COLOR);
+        return color(oColor, getPollution(x, z), 0.6D, 1.0D, LEAVES_COLOR);
     }
 
     public int colorLiquid(int oColor, int x, int z) {
-        return color(oColor, pollutionMap.getPollution(x, z) / 1000, 300, 500, LIQUID_COLOR);
+        return color(oColor, getPollution(x, z), 0.6D, 1.0D, LIQUID_COLOR);
     }
 
     public int colorFoliage(int oColor, int x, int z) {
-        return color(oColor, pollutionMap.getPollution(x, z) / 1000, 300, 500, FOLIAGE_COLOR);
-    }
-
-    public int getKnownPollution(int x, int z) {
-        return pollutionMap.getPollution(x, z);
+        return color(oColor, getPollution(x, z), 0.6D, 1.0D, FOLIAGE_COLOR);
     }
 
     @SubscribeEvent(priority = EventPriority.LOW)
@@ -158,7 +143,7 @@ public class PollutionRenderer {
             float step = (float) ((event.renderTickTime - lastUpdate) / 50);
             lastUpdate = event.renderTickTime;
 
-            float fogIntensity = (playerPollution - FOG_START_AT_POLLUTION) / (float) FOG_MAX_AT_POLLUTION;
+            float fogIntensity = (float) ((playerPollution - FOG_START_AT_POLLUTION) / (float) FOG_MAX_AT_POLLUTION);
             if (fogIntensity > 1) fogIntensity = 1;
             else if (fogIntensity < 0) fogIntensity = 0;
 
@@ -172,11 +157,7 @@ public class PollutionRenderer {
             }
         } else if (DEBUG) {
             drawPollution("Intensity: " + (fogIntensityLastTick * 10000), 0);
-            drawPollution(
-                "Pollution: " + pollutionMap.getPollution(
-                    Minecraft.getMinecraft().thePlayer.lastTickPosX,
-                    Minecraft.getMinecraft().thePlayer.lastTickPosZ),
-                20);
+            drawPollution("Pollution: " + playerPollution, 20);
             drawPollution(
                 "Density:   "
                     + ((float) (Math.pow(fogIntensityLastTick - FOG_START_EXP_RATIO, .75F) / 5 + 0.01F) * 10000),
@@ -194,9 +175,14 @@ public class PollutionRenderer {
         if (player == null || (player.capabilities.isCreativeMode && !DEBUG)) return;
 
         World w = player.worldObj;
-        playerPollution = pollutionMap.getPollution(player.lastTickPosX, player.lastTickPosZ);
+        playerPollution = Pollution.getPollution(
+            w,
+            MathHelper.floor_double(player.posX),
+            MathHelper.floor_double(player.posY),
+            MathHelper.floor_double(player.posZ)
+        );
 
-        float intensity = ((float) playerPollution - PARTICLES_POLLUTION_START) / PARTICLES_POLLUTION_END;
+        float intensity = (float) ((playerPollution - PARTICLES_POLLUTION_START) / PARTICLES_POLLUTION_END);
         if (intensity < 0) return;
         else if (intensity > 1) intensity = 1;
         else intensity *= intensity;
@@ -222,6 +208,18 @@ public class PollutionRenderer {
                 mc.effectRenderer.addEffect(fx);
             }
         }
+    }
+
+    private double getPollution(int x, int z) {
+        Minecraft mc = Minecraft.getMinecraft();
+        if (mc.theWorld == null || mc.thePlayer == null) return 0.0D;
+
+        return Pollution.getPollution(
+            mc.theWorld,
+            x,
+            MathHelper.floor_double(mc.thePlayer.posY),
+            z
+        );
     }
 
     private void drawPollution(String text, int off) {

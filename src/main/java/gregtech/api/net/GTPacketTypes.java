@@ -22,7 +22,6 @@ public enum GTPacketTypes {
     // ID 0 unused
     SOUND(1, new GTPacketSound()),
     BLOCK_EVENT(2, new GTPacketBlockEvent()),
-    POLLUTION(4, new GTPacketPollution()),
     CLIENT_PREFERENCE(9, new GTPacketClientPreference()),
     SET_CONFIGURATION_CIRCUIT(12, new GTPacketSetConfigurationCircuit()),
     UPDATE_ITEM(13, new GTPacketUpdateItem()),
@@ -59,6 +58,7 @@ public enum GTPacketTypes {
     SYNC_TILE_RENDER_DATA_TO_CLIENT(46, new GTPacketClientMTERendererData()),
     OBSERVE_MACHINE(47, new PacketObserveMachine()),
     OPEN_REMOTE_MTE_GUI(48, new PacketOpenRemoteMteGui()),
+    POLLUTION_EMITTER(49, new GTPacketPollutionEmitter()),
 
     // merge conflict prevention comment, keep a trailing comma above
     ;

@@ -1,10 +1,10 @@
 package gregtech.common.propagation;
 
-import com.gtnewhorizon.gtnhlib.blockpos.BlockPos;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import gregtech.common.pollution.Pollution;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityClientPlayerMP;
+import net.minecraft.util.MathHelper;
 import net.minecraftforge.client.event.RenderGameOverlayEvent;
 
 public class PollutionDebugRenderer {
@@ -24,14 +24,16 @@ public class PollutionDebugRenderer {
             return;
         }
 
-
-        // обновляем раз в секунду
         if (++updateTimer >= 20) {
 
             updateTimer = 0;
 
-            cachedPollution =
-                Pollution.getPropagationManager(player.worldObj).sample(new BlockPos((int) player.posX,(int) player.posY,(int) player.posZ));
+            cachedPollution = Pollution.getPollution(
+                player.worldObj,
+                MathHelper.floor_double(player.posX),
+                MathHelper.floor_double(player.posY),
+                MathHelper.floor_double(player.posZ)
+            );
         }
 
 

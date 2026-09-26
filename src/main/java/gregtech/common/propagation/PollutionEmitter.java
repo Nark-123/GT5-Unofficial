@@ -7,16 +7,15 @@ import java.util.Iterator;
 import java.util.List;
 
 public class PollutionEmitter {
-    //The half-life is 24 hours
+    // Approximately 24-hour half-life at one decay step per second.
     private static final double DEFAULT_SMOOTHING = 0.99999198;
     private static final double DEFAULT_POLLUTION_THRESHOLD = 0.05D;
     private final int dimension;
-    // Pollution grid cell position
+    // 16x16x16 cell coordinates, not block coordinates.
     private final Vec3 cellPosition;
     private final Vec3 center;
     private final List<PropagationSource> sources = new ArrayList<>();
     private final double smoothing;
-    private long lastCheckTick = -1L;
     private double pollution;
     private final List<PropagationInfluencer> influencers = new ArrayList<>();
     private static final double GAUSSIAN_3_SIGMA_MASS = 0.9707091135D;
@@ -80,38 +79,31 @@ public class PollutionEmitter {
         sources.remove(source);
     }
 
-    //happens once a second
-    public boolean update(long currentTick) {
-        lastCheckTick = currentTick;
+    // Scheduled approximately once every 20 ticks per emitter.
+    public boolean update() {
         double incomingPollution = 0.0D;
-        Iterator<PropagationSource> iterator = sources.iterator();
 
-        while (iterator.hasNext()) {
-            PropagationSource source = iterator.next();
-
-            if (!source.isValid()) {
-                iterator.remove();
-                continue;
-            }
+        for (PropagationSource source : sources) {
+            if (!source.isValid()) continue;
 
             double emission = source.consumeEmission();
-
-            if (emission == 0.0D) {
-                continue;
-            }
+            if (emission == 0.0D) continue;
 
             incomingPollution += emission;
         }
 
-        pollution = Math.max(0.0D, pollution + incomingPollution);
+        double oldPollution = pollution;
 
-        pollution *= smoothing;
-
-        if (pollution < 1.0E-9D) {
-            pollution = 0.0D;
+        if (incomingPollution != 0.0D) {
+             pollution = Math.max(0.0D, pollution + incomingPollution);
         }
 
-        return true;
+        boolean changed = pollution != oldPollution;
+        pollution *= smoothing;
+
+        if (pollution < 1.0E-9D) pollution = 0.0D;
+
+        return changed;
     }
 
     public double getInfluence(Vec3 pos) {
@@ -250,9 +242,5 @@ public class PollutionEmitter {
 
     public Vec3 getCenter() {
         return center;
-    }
-
-    public long getLastCheckTick() {
-        return lastCheckTick;
     }
 }

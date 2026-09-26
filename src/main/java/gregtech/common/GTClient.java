@@ -8,11 +8,14 @@ package gregtech.common;
 import static gregtech.api.enums.Mods.Forestry;
 import static gregtech.api.enums.Mods.GregTech;
 
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.TreeSet;
 
+import gregtech.common.propagation.PollutionClientTickHandler;
 import gregtech.common.propagation.PollutionDebugRenderer;
+import gregtech.common.propagation.PollutionManager;
 import net.minecraft.block.Block;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityPlayerSP;
@@ -159,6 +162,7 @@ import tectech.mechanics.boseEinsteinCondensate.BECFactoryGrid;
 public class GTClient extends GTProxy {
 
     public final PollutionRenderer mPollutionRenderer = new PollutionRenderer();
+    private final Map<Integer, PollutionManager> clientPollutionManagers = new HashMap<>();
     public final MetaGeneratedItemRenderer metaItemRenderer = new MetaGeneratedItemRenderer();
     public GTPowerfailRenderer powerfailRenderer;
     public KeyBinding shakeLockKey;
@@ -168,6 +172,7 @@ public class GTClient extends GTProxy {
     private boolean mFirstTick = false;
     private int mReloadCount;
     private float renderTickTime;
+
 
     @SideOnly(Side.CLIENT)
     private static MovementInput manualInputCheck;
@@ -193,9 +198,12 @@ public class GTClient extends GTProxy {
         super.onPreInitialization(event);
         SoundSystemConfig.setNumberNormalChannels(Client.preference.maxNumSounds);
         MinecraftForge.EVENT_BUS.register(new ExtraIcons());
-        MinecraftForge.EVENT_BUS.register(
-            new PollutionDebugRenderer()
-        );
+
+        MinecraftForge.EVENT_BUS.register(new PollutionDebugRenderer());
+        FMLCommonHandler.instance()
+            .bus()
+            .register(new PollutionClientTickHandler());
+
         RenderInit.registerEarly();
         Minecraft.getMinecraft()
             .getResourcePackRepository().rprMetadataSerializer
@@ -529,6 +537,17 @@ public class GTClient extends GTProxy {
         return (short) tmp;
     }
 
+    public PollutionManager getClientPollutionManager(int dimension) {
+        return clientPollutionManagers.computeIfAbsent(
+            dimension,
+            id -> new PollutionManager(id, false)
+        );
+    }
+
+    public void removeClientPollutionManager(int dimension) {
+        clientPollutionManagers.remove(dimension);
+    }
+
     public float getAnimationRenderTicks() {
         return mAnimationTick + renderTickTime;
     }
@@ -640,18 +659,16 @@ public class GTClient extends GTProxy {
                 && player.isSneaking());
     }
 
-    public void processChunkPollutionPacket(ChunkCoordIntPair chunk, int pollution) {
-        mPollutionRenderer.processPacket(chunk, pollution);
-    }
-
     @Override
     @SubscribeEvent
     public void onWorldUnload(WorldEvent.Unload event) {
         super.onWorldUnload(event);
-        RenderOverlay.onWorldUnload(event.world);
+
         if (event.world.isRemote) {
-            VacuumConveyorPipeClientStateManager.INSTANCE.clear();
+            removeClientPollutionManager(event.world.provider.dimensionId);
         }
+
+        RenderOverlay.onWorldUnload(event.world);
     }
 
     @SubscribeEvent

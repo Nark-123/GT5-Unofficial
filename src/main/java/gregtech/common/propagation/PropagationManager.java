@@ -14,5 +14,5 @@ public interface PropagationManager {
 
     float sample(BlockPos pos);
 
-    void tick(int tick);
+    void tick();
 }
