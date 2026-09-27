@@ -126,6 +126,35 @@ public class PollutionEmitter {
         return changed;
     }
 
+    public double getInfluenceProfiled(Vec3 pos, PollutionQueryProfiler profiler) {
+        if (pollution <= 0.0D) return 0.0D;
+
+        double dx = center.xCoord - pos.xCoord;
+        double dy = center.yCoord - pos.yCoord;
+        double dz = center.zCoord - pos.zCoord;
+
+        double distanceSquared = (dx * dx) + (dy * dy) + (dz * dz);
+
+        if (distanceSquared > effectiveRangeSquared) return 0.0D;
+
+        profiler.emitterInsideRange(influencers.size());
+
+        double influence = pollution / gaussianNormalization * Math.exp(-4.5D * distanceSquared * inverseRangeSquared);
+
+        if (influencers.isEmpty()) return influence;
+
+        InfluenceVector vector = new InfluenceVector(center, pos);
+
+        for (PropagationInfluencer influencer : influencers) {
+            double multiplier = influencer.influence(pos, vector);
+
+            profiler.influencerCall(multiplier);
+            influence *= multiplier;
+        }
+
+        return influence;
+    }
+
     public double getInfluence(Vec3 pos) {
         if (pollution <= 0.0D) {
             return 0.0D;

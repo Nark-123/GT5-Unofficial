@@ -16,6 +16,7 @@ import java.util.TreeSet;
 import gregtech.common.propagation.PollutionClientTickHandler;
 import gregtech.common.propagation.PollutionDebugRenderer;
 import gregtech.common.propagation.PollutionManager;
+import gregtech.common.propagation.PollutionQueryProfileClientState;
 import net.minecraft.block.Block;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityPlayerSP;
@@ -667,7 +668,11 @@ public class GTClient extends GTProxy {
 
         if (event.world.isRemote) {
             VacuumConveyorPipeClientStateManager.INSTANCE.clear();
-            removeClientPollutionManager(event.world.provider.dimensionId);
+
+            int dimension = event.world.provider.dimensionId;
+
+            removeClientPollutionManager(dimension);
+            PollutionQueryProfileClientState.clear(dimension);
         }
 
         RenderOverlay.onWorldUnload(event.world);

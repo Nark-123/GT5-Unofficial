@@ -59,6 +59,7 @@ public enum GTPacketTypes {
     OBSERVE_MACHINE(47, new PacketObserveMachine()),
     OPEN_REMOTE_MTE_GUI(48, new PacketOpenRemoteMteGui()),
     POLLUTION_EMITTER(49, new GTPacketPollutionEmitter()),
+    POLLUTION_QUERY_PROFILE(50, new GTPacketPollutionQueryProfile()),
 
     // merge conflict prevention comment, keep a trailing comma above
     ;

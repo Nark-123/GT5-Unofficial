@@ -4,6 +4,7 @@ import com.gtnewhorizon.gtnhlib.blockpos.BlockPos;
 import net.minecraft.util.Vec3;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.nbt.NBTTagList;
+import static gregtech.GTLoggers.GT_FML_LOGGER;
 
 import java.util.*;
 
@@ -23,6 +24,10 @@ public class PollutionManager implements PropagationManager {
     private final Set<BlockPos> removedEmitterCells = new HashSet<>();
     private final Set<PollutionEmitter> dirtyEmitters = new HashSet<>();
     private final boolean trackRemovals;
+    private final PollutionQueryProfiler queryProfiler = new PollutionQueryProfiler();
+    private boolean queryProfilingEnabled;
+    private static final int QUERY_PROFILE_REPORT_INTERVAL = 100;
+    private int queryProfileTicks;
 
     private static final Comparator<Vec3> CELL_COMPARATOR = new Comparator<Vec3>() {
         @Override
@@ -43,6 +48,19 @@ public class PollutionManager implements PropagationManager {
         this.dimension = dimension;
         this.trackRemovals = trackRemovals;
     }
+
+    public void setQueryProfilingEnabled(boolean enabled) {
+        queryProfilingEnabled = enabled;
+        queryProfileTicks = 0;
+        queryProfiler.reset();
+    }
+
+    public PollutionQueryProfiler.Snapshot consumeQueryProfile() {
+        PollutionQueryProfiler.Snapshot snapshot = queryProfiler.snapshot();
+        queryProfiler.reset();
+        return snapshot;
+    }
+
 
     @Override
     public void registerSource(PropagationSource source) {
@@ -174,12 +192,31 @@ public class PollutionManager implements PropagationManager {
 
     @Override
     public float sample(BlockPos pos) {
+        if (!queryProfilingEnabled) {
+            Vec3 vec = Vec3.createVectorHelper(pos.x, pos.y, pos.z);
+            double result = 0.0D;
+
+            for (PollutionEmitter emitter : spatialIndex.get(vec)) {
+                result += emitter.getInfluence(vec);
+            }
+
+            return (float) result;
+        }
+
+        long start = System.nanoTime();
+
         Vec3 vec = Vec3.createVectorHelper(pos.x, pos.y, pos.z);
+        List<PollutionEmitter> candidates = spatialIndex.get(vec);
+
+        queryProfiler.beginQuery(candidates.size());
+
         double result = 0.0D;
 
-        for (PollutionEmitter emitter : spatialIndex.get(vec)) {
-            result += emitter.getInfluence(vec);
+        for (PollutionEmitter emitter : candidates) {
+            result += emitter.getInfluenceProfiled(vec, queryProfiler);
         }
+
+        queryProfiler.endQuery(System.nanoTime() - start);
 
         return (float) result;
     }
@@ -188,6 +225,48 @@ public class PollutionManager implements PropagationManager {
     public void tick() {
         tickEmitters();
         tickInfluencers();
+
+        if (queryProfilingEnabled) {
+            tickQueryProfiler();
+        }
+    }
+
+    private void tickQueryProfiler() {
+        queryProfileTicks++;
+
+        if (queryProfileTicks < QUERY_PROFILE_REPORT_INTERVAL) {
+            return;
+        }
+
+        queryProfileTicks = 0;
+
+        PollutionQueryProfiler.Snapshot snapshot = consumeQueryProfile();
+
+        if (snapshot.queries == 0) {
+            return;
+        }
+
+        GT_FML_LOGGER.info(
+            "PollutionQueryProfiler dim={} queries={} time={}ms avg={}us/q candidates={} inside={} influencers={} noops={}% maxCandidates={} maxInfluencers={}",
+            dimension,
+            snapshot.queries,
+            snapshot.getQueryMillis(),
+            snapshot.getAverageQueryMicros(),
+            snapshot.getAverageEmitterCandidates(),
+            snapshot.getAverageEmittersInsideRange(),
+            snapshot.getAverageInfluencerCalls(),
+            snapshot.getInfluencerNoopPercent(),
+            snapshot.maxEmitterCandidates,
+            snapshot.maxInfluencersPerEmitter
+        );
+    }
+
+    public int getEmitterCount() {
+        return emitters.size();
+    }
+
+    public int getInfluencerCount() {
+        return influencers.size();
     }
 
     private void tickEmitters() {

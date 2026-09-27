@@ -13,10 +13,8 @@ import javax.annotation.ParametersAreNonnullByDefault;
 
 import com.gtnewhorizon.gtnhlib.blockpos.BlockPos;
 import gregtech.api.net.GTPacketPollutionEmitter;
-import gregtech.common.propagation.PollutionBurstSource;
-import gregtech.common.propagation.PollutionEmitter;
-import gregtech.common.propagation.PollutionManager;
-import gregtech.common.propagation.PollutionSavedData;
+import gregtech.api.net.GTPacketPollutionQueryProfile;
+import gregtech.common.propagation.*;
 import net.minecraft.block.Block;
 import net.minecraft.block.material.Material;
 import net.minecraft.entity.EntityLivingBase;
@@ -61,6 +59,7 @@ public class Pollution {
     private final Set<EntityPlayerMP> emitterSyncedPlayers = new HashSet<>();
     private int fullResyncCursor;
     private int fullResyncAccumulator;
+    private static final int QUERY_PROFILE_SYNC_INTERVAL = 10;
 
     @Deprecated
     public static int mPlayerPollution;
@@ -78,6 +77,28 @@ public class Pollution {
         if (EVENT_HANDLER == null) {
             EVENT_HANDLER = new GT_PollutionEventHandler();
             MinecraftForge.EVENT_BUS.register(EVENT_HANDLER);
+        }
+
+        if (!world.isRemote) {
+            propagationManager.setQueryProfilingEnabled(true);
+            PollutionSavedData.get(world).loadInto(propagationManager);
+        }
+    }
+
+    private void syncQueryProfile() {
+        PollutionQueryProfiler.Snapshot snapshot = propagationManager.consumeQueryProfile();
+
+        GTPacketPollutionQueryProfile packet = new GTPacketPollutionQueryProfile(
+            QUERY_PROFILE_SYNC_INTERVAL,
+            snapshot,
+            propagationManager.getEmitterCount(),
+            propagationManager.getInfluencerCount()
+        );
+
+        for (Object obj : world.playerEntities) {
+            if (obj instanceof EntityPlayerMP) {
+                GTValues.NW.sendToPlayer(packet, (EntityPlayerMP) obj);
+            }
         }
     }
 
@@ -226,6 +247,10 @@ public class Pollution {
         }
 
         pollutionInstance.propagationManager.tick();
+
+        if (aEvent.world.getTotalWorldTime() % QUERY_PROFILE_SYNC_INTERVAL == 0) {
+            pollutionInstance.syncQueryProfile();
+        }
 
         if (aEvent.world.getTotalWorldTime() % 20 == 0) {
             PollutionSavedData.get(aEvent.world).markDirty();
