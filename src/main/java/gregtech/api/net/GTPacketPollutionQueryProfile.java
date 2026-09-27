@@ -1,12 +1,13 @@
 package gregtech.api.net;
 
+import net.minecraft.world.IBlockAccess;
+import net.minecraft.world.World;
+
 import com.google.common.io.ByteArrayDataInput;
 
 import gregtech.common.propagation.PollutionQueryProfileClientState;
 import gregtech.common.propagation.PollutionQueryProfiler;
 import io.netty.buffer.ByteBuf;
-import net.minecraft.world.IBlockAccess;
-import net.minecraft.world.World;
 
 public class GTPacketPollutionQueryProfile extends GTPacket {
 
@@ -24,12 +25,8 @@ public class GTPacketPollutionQueryProfile extends GTPacket {
 
     public GTPacketPollutionQueryProfile() {}
 
-    public GTPacketPollutionQueryProfile(
-        int ticks,
-        PollutionQueryProfiler.Snapshot snapshot,
-        int emitterCount,
-        int influencerCount
-    ) {
+    public GTPacketPollutionQueryProfile(int ticks, PollutionQueryProfiler.Snapshot snapshot, int emitterCount,
+        int influencerCount) {
         this.ticks = ticks;
         this.queries = snapshot.queries;
         this.queryNanos = snapshot.queryNanos;
@@ -95,8 +92,7 @@ public class GTPacketPollutionQueryProfile extends GTPacket {
             maxEmitterCandidates,
             maxInfluencersPerEmitter,
             emitterCount,
-            influencerCount
-        );
+            influencerCount);
     }
 
     @Override

@@ -1,8 +1,8 @@
 package gregtech.common.propagation.debug;
 
-import cpw.mods.fml.common.registry.GameRegistry;
-
 import net.minecraft.block.Block;
+
+import cpw.mods.fml.common.registry.GameRegistry;
 
 public final class PollutionDebugBlocks {
 
@@ -15,24 +15,12 @@ public final class PollutionDebugBlocks {
         testEmitter = new BlockPollutionTestEmitter();
         testInfluencer = new BlockPollutionTestInfluencer();
 
-        GameRegistry.registerBlock(
-            testEmitter,
-            "pollution_test_emitter"
-        );
+        GameRegistry.registerBlock(testEmitter, "pollution_test_emitter");
 
-        GameRegistry.registerBlock(
-            testInfluencer,
-            "pollution_test_influencer"
-        );
+        GameRegistry.registerBlock(testInfluencer, "pollution_test_influencer");
 
-        GameRegistry.registerTileEntity(
-            TileEntityPollutionTestEmitter.class,
-            "GT_PollutionTestEmitter"
-        );
+        GameRegistry.registerTileEntity(TileEntityPollutionTestEmitter.class, "GT_PollutionTestEmitter");
 
-        GameRegistry.registerTileEntity(
-            TileEntityPollutionTestInfluencer.class,
-            "GT_PollutionTestInfluencer"
-        );
+        GameRegistry.registerTileEntity(TileEntityPollutionTestInfluencer.class, "GT_PollutionTestInfluencer");
     }
 }

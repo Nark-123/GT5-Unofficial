@@ -19,10 +19,7 @@ public class PollutionSavedData extends WorldSavedData {
     public static PollutionSavedData get(World world) {
         MapStorage storage = world.perWorldStorage;
 
-        PollutionSavedData data = (PollutionSavedData) storage.loadData(
-            PollutionSavedData.class,
-            DATA_NAME
-        );
+        PollutionSavedData data = (PollutionSavedData) storage.loadData(PollutionSavedData.class, DATA_NAME);
 
         if (data == null) {
             data = new PollutionSavedData(DATA_NAME);

@@ -1,12 +1,14 @@
 package gregtech.common.propagation;
 
-import cpw.mods.fml.common.eventhandler.SubscribeEvent;
-import cpw.mods.fml.common.gameevent.TickEvent;
-import gregtech.GTMod;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.World;
 
+import cpw.mods.fml.common.eventhandler.SubscribeEvent;
+import cpw.mods.fml.common.gameevent.TickEvent;
+import gregtech.GTMod;
+
 public class PollutionClientTickHandler {
+
     @SubscribeEvent
     public void onClientTick(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;

@@ -1,8 +1,15 @@
 package gregtech.common.propagation;
 
-import net.minecraft.util.Vec3;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.IdentityHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
 
-import java.util.*;
+import net.minecraft.util.Vec3;
 
 public class PropagationSpatialIndex {
 
@@ -12,6 +19,7 @@ public class PropagationSpatialIndex {
     private final Map<PollutionEmitter, Long> emitterRevisions = new IdentityHashMap<>();
 
     private static final Comparator<Vec3> BATCH_COMPARATOR = new Comparator<Vec3>() {
+
         @Override
         public int compare(Vec3 a, Vec3 b) {
             int x = Double.compare(a.xCoord, b.xCoord);
@@ -26,16 +34,13 @@ public class PropagationSpatialIndex {
 
     private final Map<Vec3, List<PollutionEmitter>> batches = new TreeMap<>(BATCH_COMPARATOR);
 
-
     public void add(PollutionEmitter emitter) {
         PropagationBatchBounds bounds = getRequiredBounds(emitter);
 
         for (int x = bounds.minX; x <= bounds.maxX; x++) {
             for (int y = bounds.minY; y <= bounds.maxY; y++) {
                 for (int z = bounds.minZ; z <= bounds.maxZ; z++) {
-                    getOrCreate(
-                        Vec3.createVectorHelper(x, y, z)
-                    ).add(emitter);
+                    getOrCreate(Vec3.createVectorHelper(x, y, z)).add(emitter);
                 }
             }
         }
@@ -90,8 +95,7 @@ public class PropagationSpatialIndex {
             getBatchCoordinate(position.zCoord - range),
             getBatchCoordinate(position.xCoord + range),
             getBatchCoordinate(position.yCoord + range),
-            getBatchCoordinate(position.zCoord + range)
-        );
+            getBatchCoordinate(position.zCoord + range));
     }
 
     public void remove(PollutionEmitter emitter) {
@@ -123,7 +127,6 @@ public class PropagationSpatialIndex {
         emitterRevisions.remove(emitter);
     }
 
-
     public Set<PollutionEmitter> get(Vec3 position, double range) {
         PropagationBatchBounds bounds = getRequiredBounds(position, range);
         Set<PollutionEmitter> result = Collections.newSetFromMap(new IdentityHashMap<>());
@@ -153,33 +156,27 @@ public class PropagationSpatialIndex {
         return result;
     }
 
-
     private List<PollutionEmitter> getOrCreate(Vec3 position) {
         return batches.computeIfAbsent(position, k -> new ArrayList<>());
     }
-
 
     private Vec3 getBatchPosition(Vec3 pos) {
         return Vec3.createVectorHelper(
             getBatchCoordinate(pos.xCoord),
             getBatchCoordinate(pos.yCoord),
-            getBatchCoordinate(pos.zCoord)
-        );
+            getBatchCoordinate(pos.zCoord));
     }
 
     private int getBatchCoordinate(double coordinate) {
         return (int) Math.floor(coordinate / BATCH_SIZE);
     }
 
-
     private static final class BatchBounds {
+
         final int minX, minY, minZ;
         final int maxX, maxY, maxZ;
 
-        BatchBounds(
-            int minX, int minY, int minZ,
-            int maxX, int maxY, int maxZ
-        ) {
+        BatchBounds(int minX, int minY, int minZ, int maxX, int maxY, int maxZ) {
             this.minX = minX;
             this.minY = minY;
             this.minZ = minZ;
@@ -189,8 +186,7 @@ public class PropagationSpatialIndex {
         }
 
         boolean contains(BatchBounds other) {
-            return other.minX >= minX
-                && other.minY >= minY
+            return other.minX >= minX && other.minY >= minY
                 && other.minZ >= minZ
                 && other.maxX <= maxX
                 && other.maxY <= maxY
@@ -198,9 +194,7 @@ public class PropagationSpatialIndex {
         }
 
         boolean contains(int x, int y, int z) {
-            return x >= minX && x <= maxX
-                && y >= minY && y <= maxY
-                && z >= minZ && z <= maxZ;
+            return x >= minX && x <= maxX && y >= minY && y <= maxY && z >= minZ && z <= maxZ;
         }
 
         BatchBounds expandToInclude(BatchBounds other) {
@@ -210,8 +204,7 @@ public class PropagationSpatialIndex {
                 Math.min(minZ, other.minZ),
                 Math.max(maxX, other.maxX),
                 Math.max(maxY, other.maxY),
-                Math.max(maxZ, other.maxZ)
-            );
+                Math.max(maxZ, other.maxZ));
         }
     }
 }

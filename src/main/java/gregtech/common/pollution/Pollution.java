@@ -11,10 +11,6 @@ import java.util.Set;
 
 import javax.annotation.ParametersAreNonnullByDefault;
 
-import com.gtnewhorizon.gtnhlib.blockpos.BlockPos;
-import gregtech.api.net.GTPacketPollutionEmitter;
-import gregtech.api.net.GTPacketPollutionQueryProfile;
-import gregtech.common.propagation.*;
 import net.minecraft.block.Block;
 import net.minecraft.block.material.Material;
 import net.minecraft.entity.EntityLivingBase;
@@ -31,6 +27,7 @@ import net.minecraftforge.event.entity.living.LivingEvent;
 import net.minecraftforge.event.world.ChunkDataEvent;
 import net.minecraftforge.event.world.WorldEvent;
 
+import com.gtnewhorizon.gtnhlib.blockpos.BlockPos;
 import com.gtnewhorizon.gtnhlib.capability.Capabilities;
 
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
@@ -41,10 +38,17 @@ import gregtech.api.hazards.HazardProtection;
 import gregtech.api.interfaces.ICleanroom;
 import gregtech.api.interfaces.ICleanroomReceiver;
 import gregtech.api.interfaces.tileentity.IGregTechTileEntity;
+import gregtech.api.net.GTPacketPollutionEmitter;
+import gregtech.api.net.GTPacketPollutionQueryProfile;
 import gregtech.api.util.GTChunkAssociatedData;
 import gregtech.api.util.GTUtility;
+import gregtech.common.propagation.PollutionEmitter;
+import gregtech.common.propagation.PollutionManager;
+import gregtech.common.propagation.PollutionQueryProfiler;
+import gregtech.common.propagation.PollutionSavedData;
 
 public class Pollution {
+
     // Legacy chunk pollution storage. Used only for one-time migration.
     private static final LegacyStorage LEGACY_STORAGE = new LegacyStorage();
     private final World world;
@@ -71,7 +75,8 @@ public class Pollution {
         this.propagationManager = new PollutionManager(world.provider.dimensionId);
 
         if (!world.isRemote) {
-            PollutionSavedData.get(world).loadInto(propagationManager);
+            PollutionSavedData.get(world)
+                .loadInto(propagationManager);
         }
 
         if (EVENT_HANDLER == null) {
@@ -81,7 +86,8 @@ public class Pollution {
 
         if (!world.isRemote) {
             propagationManager.setQueryProfilingEnabled(true);
-            PollutionSavedData.get(world).loadInto(propagationManager);
+            PollutionSavedData.get(world)
+                .loadInto(propagationManager);
         }
     }
 
@@ -92,8 +98,7 @@ public class Pollution {
             QUERY_PROFILE_SYNC_INTERVAL,
             snapshot,
             propagationManager.getEmitterCount(),
-            propagationManager.getInfluencerCount()
-        );
+            propagationManager.getInfluencerCount());
 
         for (Object obj : world.playerEntities) {
             if (obj instanceof EntityPlayerMP) {
@@ -128,13 +133,7 @@ public class Pollution {
             pollution[index++] = emitter.getPollution();
         }
 
-        return new GTPacketPollutionEmitter(
-            true,
-            cellX,
-            cellY,
-            cellZ,
-            pollution
-        );
+        return new GTPacketPollutionEmitter(true, cellX, cellY, cellZ, pollution);
     }
 
     private void syncPlayerPollution() {
@@ -169,9 +168,7 @@ public class Pollution {
                 pollution[index++] = 0.0D;
             }
 
-            updatePacket = new GTPacketPollutionEmitter(
-                false, cellX, cellY, cellZ, pollution
-            );
+            updatePacket = new GTPacketPollutionEmitter(false, cellX, cellY, cellZ, pollution);
         }
 
         int syncedCount = 0;
@@ -238,8 +235,7 @@ public class Pollution {
         if (aEvent.world.isRemote) return;
         if (aEvent.phase == TickEvent.Phase.START) return;
 
-        Pollution pollutionInstance =
-            GTMod.proxy.dimensionWisePollution.get(aEvent.world.provider.dimensionId);
+        Pollution pollutionInstance = GTMod.proxy.dimensionWisePollution.get(aEvent.world.provider.dimensionId);
 
         if (pollutionInstance == null) {
             pollutionInstance = getPollutionManager(aEvent.world);
@@ -253,7 +249,8 @@ public class Pollution {
         }
 
         if (aEvent.world.getTotalWorldTime() % 20 == 0) {
-            PollutionSavedData.get(aEvent.world).markDirty();
+            PollutionSavedData.get(aEvent.world)
+                .markDirty();
             pollutionInstance.tickVegetation();
             pollutionInstance.syncPlayerPollution();
         }
@@ -312,7 +309,7 @@ public class Pollution {
                 continue;
             }
 
-            damageBlock(world, x, y, z,pollution >= SOUR_RAIN_THRESHOLD);
+            damageBlock(world, x, y, z, pollution >= SOUR_RAIN_THRESHOLD);
         }
     }
 
@@ -399,12 +396,7 @@ public class Pollution {
 
         World world = te.getWorldObj();
 
-        getPropagationManager(world).addPollution(
-            te.xCoord,
-            te.yCoord,
-            te.zCoord,
-            aPollution
-        );
+        getPropagationManager(world).addPollution(te.xCoord, te.yCoord, te.zCoord, aPollution);
     }
 
     /** @see #addPollution(World, int, int, int) */
@@ -419,12 +411,7 @@ public class Pollution {
     public static void addPollution(World world, int chunkX, int chunkZ, int pollution) {
         if (!GTMod.proxy.mPollution || pollution == 0 || world.isRemote) return;
 
-        getPropagationManager(world).addPollution(
-            (chunkX << 4) + 8,
-            70,
-            (chunkZ << 4) + 8,
-            pollution
-        );
+        getPropagationManager(world).addPollution((chunkX << 4) + 8, 70, (chunkZ << 4) + 8, pollution);
     }
 
     /** @see #getPollution(World, int, int) */
@@ -440,8 +427,7 @@ public class Pollution {
     public static void polluteCleanroom(TileEntity te) {
         if (!GTMod.proxy.mPollution || te.getWorldObj().isRemote) return;
 
-        ICleanroomReceiver receiver =
-            Capabilities.getCapability(te, ICleanroomReceiver.class);
+        ICleanroomReceiver receiver = Capabilities.getCapability(te, ICleanroomReceiver.class);
 
         if (receiver == null) return;
 
@@ -459,12 +445,7 @@ public class Pollution {
     public static int getPollution(World world, int chunkX, int chunkZ) {
         if (!GTMod.proxy.mPollution) return 0;
 
-        double pollution = getPollution(
-            world,
-            (chunkX << 4) + 8,
-            70,
-            (chunkZ << 4) + 8
-        );
+        double pollution = getPollution(world, (chunkX << 4) + 8, 70, (chunkZ << 4) + 8);
 
         return toLegacyPollution(pollution);
     }
@@ -482,9 +463,7 @@ public class Pollution {
     }
 
     private static int toLegacyPollution(double pollution) {
-        return GTUtility.safeInt(
-            Math.round(pollution * LEGACY_POLLUTION_SCALE)
-        );
+        return GTUtility.safeInt(Math.round(pollution * LEGACY_POLLUTION_SCALE));
     }
 
     public static double getPollution(World world, int x, int y, int z) {
@@ -506,24 +485,24 @@ public class Pollution {
 
     // Migrates the legacy GTPOLLUTION chunk NBT tag into the propagation system.
     public static void migrate(ChunkDataEvent.Load e) {
-        if (!e.getData().hasKey("GTPOLLUTION")) {
+        if (!e.getData()
+            .hasKey("GTPOLLUTION")) {
             return;
         }
 
-        int pollution = e.getData().getInteger("GTPOLLUTION");
+        int pollution = e.getData()
+            .getInteger("GTPOLLUTION");
 
-        e.getData().removeTag("GTPOLLUTION");
-        e.getChunk().setChunkModified();
+        e.getData()
+            .removeTag("GTPOLLUTION");
+        e.getChunk()
+            .setChunkModified();
 
         if (pollution > 0) {
             Chunk chunk = e.getChunk();
 
-            getPropagationManager(chunk.worldObj).addPollution(
-                (chunk.xPosition << 4) + 8,
-                70,
-                (chunk.zPosition << 4) + 8,
-                pollution
-            );
+            getPropagationManager(chunk.worldObj)
+                .addPollution((chunk.xPosition << 4) + 8, 70, (chunk.zPosition << 4) + 8, pollution);
         }
     }
 
@@ -540,15 +519,10 @@ public class Pollution {
 
             if (entity.ticksExisted % 20 != 0) return;
 
-            double pollution = getPollution(
-                world,
-                (int) entity.posX,
-                (int) entity.posY,
-                (int) entity.posZ);
+            double pollution = getPollution(world, (int) entity.posX, (int) entity.posY, (int) entity.posZ);
 
             if (pollution >= SMOG_THRESHOLD) {
-                if (entity instanceof EntityPlayerMP
-                    && ((EntityPlayerMP) entity).capabilities.isCreativeMode) {
+                if (entity instanceof EntityPlayerMP && ((EntityPlayerMP) entity).capabilities.isCreativeMode) {
                     return;
                 }
 
@@ -558,18 +532,15 @@ public class Pollution {
 
                 switch (XSTR_INSTANCE.nextInt(3)) {
                     case 0:
-                        entity.addPotionEffect(
-                            new PotionEffect(Potion.weakness.id, 40, 0));
+                        entity.addPotionEffect(new PotionEffect(Potion.weakness.id, 40, 0));
                         break;
 
                     case 1:
-                        entity.addPotionEffect(
-                            new PotionEffect(Potion.moveSlowdown.id, 40, 0));
+                        entity.addPotionEffect(new PotionEffect(Potion.moveSlowdown.id, 40, 0));
                         break;
 
                     case 2:
-                        entity.addPotionEffect(
-                            new PotionEffect(Potion.digSlowdown.id, 40, 0));
+                        entity.addPotionEffect(new PotionEffect(Potion.digSlowdown.id, 40, 0));
                         break;
                 }
             }
@@ -577,23 +548,19 @@ public class Pollution {
             if (pollution >= POISON_THRESHOLD) {
                 switch (XSTR_INSTANCE.nextInt(4)) {
                     case 0:
-                        entity.addPotionEffect(
-                            new PotionEffect(Potion.confusion.id, 40, 0));
+                        entity.addPotionEffect(new PotionEffect(Potion.confusion.id, 40, 0));
                         break;
 
                     case 1:
-                        entity.addPotionEffect(
-                            new PotionEffect(Potion.poison.id, 40, 0));
+                        entity.addPotionEffect(new PotionEffect(Potion.poison.id, 40, 0));
                         break;
 
                     case 2:
-                        entity.addPotionEffect(
-                            new PotionEffect(Potion.blindness.id, 40, 0));
+                        entity.addPotionEffect(new PotionEffect(Potion.blindness.id, 40, 0));
                         break;
 
                     case 3:
-                        entity.addPotionEffect(
-                            new PotionEffect(Potion.hunger.id, 40, 0));
+                        entity.addPotionEffect(new PotionEffect(Potion.hunger.id, 40, 0));
                         break;
                 }
             }
@@ -622,19 +589,14 @@ public class Pollution {
         }
 
         @Override
-        protected void writeElement(DataOutput output, LegacyChunkData element,
-                                    World world, int chunkX, int chunkZ) throws IOException {
+        protected void writeElement(DataOutput output, LegacyChunkData element, World world, int chunkX, int chunkZ)
+            throws IOException {
             output.writeInt(0);
         }
 
         @Override
-        protected LegacyChunkData readElement(
-            DataInput input,
-            int version,
-            World world,
-            int chunkX,
-            int chunkZ
-        ) throws IOException {
+        protected LegacyChunkData readElement(DataInput input, int version, World world, int chunkX, int chunkZ)
+            throws IOException {
             if (version != 0) {
                 throw new IOException("Region file corrupted");
             }
@@ -642,12 +604,7 @@ public class Pollution {
             int pollution = input.readInt();
 
             if (pollution > 0) {
-                getPropagationManager(world).addPollution(
-                    (chunkX << 4) + 8,
-                    70,
-                    (chunkZ << 4) + 8,
-                    pollution
-                );
+                getPropagationManager(world).addPollution((chunkX << 4) + 8, 70, (chunkZ << 4) + 8, pollution);
             }
 
             return new LegacyChunkData();

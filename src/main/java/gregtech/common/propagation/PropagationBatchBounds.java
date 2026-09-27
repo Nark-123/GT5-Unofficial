@@ -19,8 +19,7 @@ final class PropagationBatchBounds {
     }
 
     boolean contains(PropagationBatchBounds other) {
-        return other.minX >= minX
-            && other.minY >= minY
+        return other.minX >= minX && other.minY >= minY
             && other.minZ >= minZ
             && other.maxX <= maxX
             && other.maxY <= maxY
@@ -28,9 +27,7 @@ final class PropagationBatchBounds {
     }
 
     boolean contains(int x, int y, int z) {
-        return x >= minX && x <= maxX
-            && y >= minY && y <= maxY
-            && z >= minZ && z <= maxZ;
+        return x >= minX && x <= maxX && y >= minY && y <= maxY && z >= minZ && z <= maxZ;
     }
 
     PropagationBatchBounds expandToInclude(PropagationBatchBounds other) {
@@ -40,7 +37,6 @@ final class PropagationBatchBounds {
             Math.min(minZ, other.minZ),
             Math.max(maxX, other.maxX),
             Math.max(maxY, other.maxY),
-            Math.max(maxZ, other.maxZ)
-        );
+            Math.max(maxZ, other.maxZ));
     }
 }

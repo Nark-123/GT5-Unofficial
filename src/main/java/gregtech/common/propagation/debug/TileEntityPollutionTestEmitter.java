@@ -1,11 +1,11 @@
 package gregtech.common.propagation.debug;
 
-import gregtech.common.pollution.Pollution;
-import gregtech.common.propagation.PropagationSource;
-
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.Vec3;
+
+import gregtech.common.pollution.Pollution;
+import gregtech.common.propagation.PropagationSource;
 
 public class TileEntityPollutionTestEmitter extends TileEntity {
 
@@ -28,18 +28,14 @@ public class TileEntityPollutionTestEmitter extends TileEntity {
         }
 
         if (!registered) {
-            Pollution.getPropagationManager(worldObj).registerSource(source);
+            Pollution.getPropagationManager(worldObj)
+                .registerSource(source);
             registered = true;
         }
 
         source.addEmission(emissionPerSecond / 20.0D);
 
-        lastSample = Pollution.getPollution(
-            worldObj,
-            xCoord,
-            yCoord,
-            zCoord
-        );
+        lastSample = Pollution.getPollution(worldObj, xCoord, yCoord, zCoord);
     }
 
     @Override
@@ -57,7 +53,8 @@ public class TileEntityPollutionTestEmitter extends TileEntity {
     private void unregisterSource() {
         if (!registered || worldObj == null || worldObj.isRemote) return;
 
-        Pollution.getPropagationManager(worldObj).unregisterSource(source);
+        Pollution.getPropagationManager(worldObj)
+            .unregisterSource(source);
         registered = false;
     }
 
@@ -93,11 +90,7 @@ public class TileEntityPollutionTestEmitter extends TileEntity {
 
         @Override
         public Vec3 getPosition() {
-            return Vec3.createVectorHelper(
-                xCoord + 0.5D,
-                yCoord + 0.5D,
-                zCoord + 0.5D
-            );
+            return Vec3.createVectorHelper(xCoord + 0.5D, yCoord + 0.5D, zCoord + 0.5D);
         }
 
         @Override
@@ -107,8 +100,7 @@ public class TileEntityPollutionTestEmitter extends TileEntity {
 
         @Override
         public boolean isValid() {
-            return !TileEntityPollutionTestEmitter.this.isInvalid()
-                && worldObj != null
+            return !TileEntityPollutionTestEmitter.this.isInvalid() && worldObj != null
                 && worldObj.getTileEntity(xCoord, yCoord, zCoord) == TileEntityPollutionTestEmitter.this;
         }
 

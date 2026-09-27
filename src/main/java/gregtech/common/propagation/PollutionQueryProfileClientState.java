@@ -9,20 +9,9 @@ public final class PollutionQueryProfileClientState {
 
     private PollutionQueryProfileClientState() {}
 
-    public static void update(
-        int dimension,
-        int ticks,
-        long queries,
-        long queryNanos,
-        long emitterCandidates,
-        long emittersInsideRange,
-        long influencerCalls,
-        long influencerNoops,
-        int maxEmitterCandidates,
-        int maxInfluencersPerEmitter,
-        int emitterCount,
-        int influencerCount
-    ) {
+    public static void update(int dimension, int ticks, long queries, long queryNanos, long emitterCandidates,
+        long emittersInsideRange, long influencerCalls, long influencerNoops, int maxEmitterCandidates,
+        int maxInfluencersPerEmitter, int emitterCount, int influencerCount) {
         STATES.put(
             dimension,
             new Data(
@@ -36,9 +25,7 @@ public final class PollutionQueryProfileClientState {
                 maxEmitterCandidates,
                 maxInfluencersPerEmitter,
                 emitterCount,
-                influencerCount
-            )
-        );
+                influencerCount));
     }
 
     public static Data get(int dimension) {
@@ -64,19 +51,9 @@ public final class PollutionQueryProfileClientState {
         public final int emitterCount;
         public final int influencerCount;
 
-        private Data(
-            int ticks,
-            long queries,
-            long queryNanos,
-            long emitterCandidates,
-            long emittersInsideRange,
-            long influencerCalls,
-            long influencerNoops,
-            int maxEmitterCandidates,
-            int maxInfluencersPerEmitter,
-            int emitterCount,
-            int influencerCount
-        ) {
+        private Data(int ticks, long queries, long queryNanos, long emitterCandidates, long emittersInsideRange,
+            long influencerCalls, long influencerNoops, int maxEmitterCandidates, int maxInfluencersPerEmitter,
+            int emitterCount, int influencerCount) {
             this.ticks = ticks;
             this.queries = queries;
             this.queryNanos = queryNanos;

@@ -1,9 +1,9 @@
 package gregtech.common.propagation;
 
+import net.minecraft.util.Vec3;
+
 import gregtech.api.interfaces.tileentity.IGregTechTileEntity;
 import gregtech.api.metatileentity.MetaTileEntity;
-
-import net.minecraft.util.Vec3;
 
 public class PollutionSource implements PropagationSource {
 
@@ -43,9 +43,7 @@ public class PollutionSource implements PropagationSource {
 
         IGregTechTileEntity base = source.getBaseMetaTileEntity();
 
-        return base != null
-            && !base.isDead()
-            && base.getMetaTileEntity() == source;
+        return base != null && !base.isDead() && base.getMetaTileEntity() == source;
     }
 
     @Override

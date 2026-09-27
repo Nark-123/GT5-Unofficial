@@ -1,12 +1,22 @@
 package gregtech.common.propagation;
 
-import com.gtnewhorizon.gtnhlib.blockpos.BlockPos;
-import net.minecraft.util.Vec3;
-import net.minecraft.nbt.NBTTagCompound;
-import net.minecraft.nbt.NBTTagList;
 import static gregtech.GTLoggers.GT_FML_LOGGER;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
+
+import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.nbt.NBTTagList;
+import net.minecraft.util.Vec3;
+
+import com.gtnewhorizon.gtnhlib.blockpos.BlockPos;
 
 public class PollutionManager implements PropagationManager {
 
@@ -30,6 +40,7 @@ public class PollutionManager implements PropagationManager {
     private int queryProfileTicks;
 
     private static final Comparator<Vec3> CELL_COMPARATOR = new Comparator<Vec3>() {
+
         @Override
         public int compare(Vec3 a, Vec3 b) {
             int x = Double.compare(a.xCoord, b.xCoord);
@@ -60,7 +71,6 @@ public class PollutionManager implements PropagationManager {
         queryProfiler.reset();
         return snapshot;
     }
-
 
     @Override
     public void registerSource(PropagationSource source) {
@@ -113,11 +123,7 @@ public class PollutionManager implements PropagationManager {
 
         if (trackRemovals) {
             Vec3 cell = emitter.getCellPosition();
-            removedEmitterCells.remove(new BlockPos(
-                (int) cell.xCoord,
-                (int) cell.yCoord,
-                (int) cell.zCoord
-            ));
+            removedEmitterCells.remove(new BlockPos((int) cell.xCoord, (int) cell.yCoord, (int) cell.zCoord));
         }
     }
 
@@ -135,11 +141,7 @@ public class PollutionManager implements PropagationManager {
         pollutionEmitters.remove(cell);
 
         if (trackRemovals) {
-            removedEmitterCells.add(new BlockPos(
-                (int) cell.xCoord,
-                (int) cell.yCoord,
-                (int) cell.zCoord
-            ));
+            removedEmitterCells.add(new BlockPos((int) cell.xCoord, (int) cell.yCoord, (int) cell.zCoord));
         }
     }
 
@@ -257,8 +259,7 @@ public class PollutionManager implements PropagationManager {
             snapshot.getAverageInfluencerCalls(),
             snapshot.getInfluencerNoopPercent(),
             snapshot.maxEmitterCandidates,
-            snapshot.maxInfluencersPerEmitter
-        );
+            snapshot.maxInfluencersPerEmitter);
     }
 
     public int getEmitterCount() {
@@ -381,8 +382,7 @@ public class PollutionManager implements PropagationManager {
             Vec3 cellPosition = Vec3.createVectorHelper(
                 emitterTag.getInteger("CellX"),
                 emitterTag.getInteger("CellY"),
-                emitterTag.getInteger("CellZ")
-            );
+                emitterTag.getInteger("CellZ"));
 
             double pollution = emitterTag.getDouble("Pollution");
 
@@ -390,8 +390,7 @@ public class PollutionManager implements PropagationManager {
                 continue;
             }
 
-            PollutionEmitter emitter =
-                new PollutionEmitter(dimension, cellPosition, 256);
+            PollutionEmitter emitter = new PollutionEmitter(dimension, cellPosition, 256);
 
             emitter.setPollution(pollution);
 
@@ -399,12 +398,7 @@ public class PollutionManager implements PropagationManager {
         }
     }
 
-    public void applyEmitterSnapshot(
-        int[] cellX,
-        int[] cellY,
-        int[] cellZ,
-        double[] pollution
-    ) {
+    public void applyEmitterSnapshot(int[] cellX, int[] cellY, int[] cellZ, double[] pollution) {
         Set<Vec3> received = new TreeSet<>(CELL_COMPARATOR);
 
         for (int i = 0; i < pollution.length; i++) {
@@ -473,7 +467,6 @@ public class PollutionManager implements PropagationManager {
         return Vec3.createVectorHelper(
             ((int) Math.floor(position.xCoord)) >> 4,
             ((int) Math.floor(position.yCoord)) >> 4,
-            ((int) Math.floor(position.zCoord)) >> 4
-        );
+            ((int) Math.floor(position.zCoord)) >> 4);
     }
 }

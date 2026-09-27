@@ -1,12 +1,13 @@
 package gregtech.api.net;
 
+import net.minecraft.world.IBlockAccess;
+import net.minecraft.world.World;
+
 import com.google.common.io.ByteArrayDataInput;
 
 import gregtech.GTMod;
 import gregtech.common.propagation.PollutionManager;
 import io.netty.buffer.ByteBuf;
-import net.minecraft.world.IBlockAccess;
-import net.minecraft.world.World;
 
 public class GTPacketPollutionEmitter extends GTPacket {
 
@@ -19,13 +20,7 @@ public class GTPacketPollutionEmitter extends GTPacket {
 
     public GTPacketPollutionEmitter() {}
 
-    public GTPacketPollutionEmitter(
-        boolean fullSnapshot,
-        int[] cellX,
-        int[] cellY,
-        int[] cellZ,
-        double[] pollution
-    ) {
+    public GTPacketPollutionEmitter(boolean fullSnapshot, int[] cellX, int[] cellY, int[] cellZ, double[] pollution) {
         this.fullSnapshot = fullSnapshot;
         this.cellX = cellX;
         this.cellY = cellY;
@@ -63,13 +58,7 @@ public class GTPacketPollutionEmitter extends GTPacket {
             pollution[i] = data.readDouble();
         }
 
-        return new GTPacketPollutionEmitter(
-            fullSnapshot,
-            cellX,
-            cellY,
-            cellZ,
-            pollution
-        );
+        return new GTPacketPollutionEmitter(fullSnapshot, cellX, cellY, cellZ, pollution);
     }
 
     @Override
@@ -89,17 +78,11 @@ public class GTPacketPollutionEmitter extends GTPacket {
             return;
         }
 
-        PollutionManager manager =
-            GTMod.clientProxy()
-                .getClientPollutionManager(dimension);
+        PollutionManager manager = GTMod.clientProxy()
+            .getClientPollutionManager(dimension);
 
         for (int i = 0; i < pollution.length; i++) {
-            manager.setEmitterPollution(
-                cellX[i],
-                cellY[i],
-                cellZ[i],
-                pollution[i]
-            );
+            manager.setEmitterPollution(cellX[i], cellY[i], cellZ[i], pollution[i]);
         }
     }
 

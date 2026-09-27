@@ -23,13 +23,13 @@ import gregtech.api.util.GTSplit;
 import gregtech.api.util.WorldSpawnedEventBuilder;
 import gregtech.api.util.tooltip.TooltipHelper;
 import gregtech.common.pollution.Pollution;
-
 import gregtech.common.propagation.PollutionSource;
 
 @SuppressWarnings("unused") // Unused API is expected within scope
 @IMetaTileEntity.SkipGenerateDescription
 @IMetaTileEntity.SkipGenerateName
 public class MTEHatchMuffler extends MTEHatch {
+
     private PollutionSource pollutionSource;
 
     public MTEHatchMuffler(int aID, String aName, String aNameRegional, int aTier) {

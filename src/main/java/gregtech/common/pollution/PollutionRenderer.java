@@ -179,14 +179,12 @@ public class PollutionRenderer {
             w,
             MathHelper.floor_double(player.posX),
             MathHelper.floor_double(player.posY),
-            MathHelper.floor_double(player.posZ)
-        );
+            MathHelper.floor_double(player.posZ));
 
         Pollution.mPlayerPollution = Pollution.getPollution(
             player.worldObj,
             MathHelper.floor_double(player.posX) >> 4,
-            MathHelper.floor_double(player.posZ) >> 4
-        );
+            MathHelper.floor_double(player.posZ) >> 4);
 
         float intensity = (float) ((playerPollution - PARTICLES_POLLUTION_START) / PARTICLES_POLLUTION_END);
         if (intensity < 0) return;
@@ -220,12 +218,7 @@ public class PollutionRenderer {
         Minecraft mc = Minecraft.getMinecraft();
         if (mc.theWorld == null || mc.thePlayer == null) return 0.0D;
 
-        return Pollution.getPollution(
-            mc.theWorld,
-            x,
-            MathHelper.floor_double(mc.thePlayer.posY),
-            z
-        );
+        return Pollution.getPollution(mc.theWorld, x, MathHelper.floor_double(mc.thePlayer.posY), z);
     }
 
     private void drawPollution(String text, int off) {
@@ -242,11 +235,7 @@ public class PollutionRenderer {
         Minecraft mc = Minecraft.getMinecraft();
         if (mc.theWorld == null) return 0;
 
-        return Pollution.getPollution(
-            mc.theWorld,
-            x >> 4,
-            z >> 4
-        );
+        return Pollution.getPollution(mc.theWorld, x >> 4, z >> 4);
     }
 
     @Deprecated

@@ -12,4 +12,3 @@ public interface PropagationSource {
 
     double consumeEmission();
 }
-

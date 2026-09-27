@@ -1,13 +1,13 @@
 package gregtech.common.propagation;
 
-import net.minecraft.util.Vec3;
-
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
+import net.minecraft.util.Vec3;
+
 public class PollutionEmitter {
+
     // Approximately 24-hour half-life at one decay step per second.
     private static final double DEFAULT_SMOOTHING = 0.99999198;
     private static final double DEFAULT_POLLUTION_THRESHOLD = 0.05D;
@@ -18,7 +18,7 @@ public class PollutionEmitter {
     private final List<PropagationSource> sources = new ArrayList<>();
     private final double smoothing;
     private double pollution;
-    private final List<PropagationInfluencer> influencers = new ArrayList<>();
+    private final List<InfluenceVector> influencers = new ArrayList<>();
     private static final double GAUSSIAN_3_SIGMA_MASS = 0.9707091135D;
     private final double basePropagationRange;
     private double rangeMultiplier = 1.0D;
@@ -30,22 +30,11 @@ public class PollutionEmitter {
     private long propagationRevision;
     private double propagationRange;
 
-
     public PollutionEmitter(int dimension, Vec3 cellPosition, double propagationRange) {
-        this(
-            dimension,
-            cellPosition,
-            propagationRange,
-            DEFAULT_SMOOTHING
-        );
+        this(dimension, cellPosition, propagationRange, DEFAULT_SMOOTHING);
     }
 
-    public PollutionEmitter(
-        int dimension,
-        Vec3 cellPosition,
-        double propagationRange,
-        double smoothing
-    ) {
+    public PollutionEmitter(int dimension, Vec3 cellPosition, double propagationRange, double smoothing) {
         this.dimension = dimension;
         this.cellPosition = cellPosition;
         this.smoothing = smoothing;
@@ -61,20 +50,15 @@ public class PollutionEmitter {
         }
 
         if (source.getDimension() != dimension) {
-            throw new IllegalArgumentException(
-                "Source belongs to another dimension"
-            );
+            throw new IllegalArgumentException("Source belongs to another dimension");
         }
 
         Vec3 sourceCell = getCellPosition(source.getPosition());
 
-        if (sourceCell.xCoord != cellPosition.xCoord
-            || sourceCell.yCoord != cellPosition.yCoord
+        if (sourceCell.xCoord != cellPosition.xCoord || sourceCell.yCoord != cellPosition.yCoord
             || sourceCell.zCoord != cellPosition.zCoord) {
 
-            throw new IllegalArgumentException(
-                "Source belongs to another pollution cell"
-            );
+            throw new IllegalArgumentException("Source belongs to another pollution cell");
         }
 
         if (!sources.contains(source)) {
@@ -143,11 +127,8 @@ public class PollutionEmitter {
 
         if (influencers.isEmpty()) return influence;
 
-        InfluenceVector vector = new InfluenceVector(center, pos);
-
-        for (PropagationInfluencer influencer : influencers) {
-            double multiplier = influencer.influence(pos, vector);
-
+        for (InfluenceVector vector : influencers) {
+            double multiplier = vector.source.influence(pos, vector);
             profiler.influencerCall(multiplier);
             influence *= multiplier;
         }
@@ -176,10 +157,8 @@ public class PollutionEmitter {
             return influence;
         }
 
-        InfluenceVector vector = new InfluenceVector(center, pos);
-
-        for (PropagationInfluencer influencer : influencers) {
-            influence *= influencer.influence(pos, vector);
+        for (InfluenceVector vector : influencers) {
+            influence *= vector.source.influence(pos, vector);
         }
 
         return influence;
@@ -200,13 +179,22 @@ public class PollutionEmitter {
     }
 
     public void addInfluencer(PropagationInfluencer influencer) {
-        if (!influencers.contains(influencer)) {
-            influencers.add(influencer);
+        for (InfluenceVector vector : influencers) {
+            if (vector.source == influencer) return;
         }
+
+        influencers.add(new InfluenceVector(center, influencer));
     }
 
     public void removeInfluencer(PropagationInfluencer influencer) {
-        influencers.remove(influencer);
+        Iterator<InfluenceVector> iterator = influencers.iterator();
+
+        while (iterator.hasNext()) {
+            if (iterator.next().source == influencer) {
+                iterator.remove();
+                return;
+            }
+        }
     }
 
     private Vec3 getCellCenter(Vec3 cellPosition) {
@@ -214,8 +202,7 @@ public class PollutionEmitter {
         return Vec3.createVectorHelper(
             cellPosition.xCoord * 16.0D + 8.0D,
             cellPosition.yCoord * 16.0D + 8.0D,
-            cellPosition.zCoord * 16.0D + 8.0D
-        );
+            cellPosition.zCoord * 16.0D + 8.0D);
     }
 
     private void recalculatePropagationRange() {
@@ -223,12 +210,10 @@ public class PollutionEmitter {
         effectiveRangeSquared = effectiveRange * effectiveRange;
         inverseRangeSquared = 1.0D / effectiveRangeSquared;
 
-        gaussianNormalization =
-            Math.pow(2.0D * Math.PI, 1.5D)
-                * effectiveRange
-                * effectiveRangeSquared
-                / 27.0D
-                * GAUSSIAN_3_SIGMA_MASS;
+        gaussianNormalization = Math.pow(2.0D * Math.PI, 1.5D) * effectiveRange
+            * effectiveRangeSquared
+            / 27.0D
+            * GAUSSIAN_3_SIGMA_MASS;
     }
 
     private void setPropagationRange(double range) {
@@ -245,8 +230,7 @@ public class PollutionEmitter {
         return Vec3.createVectorHelper(
             ((int) Math.floor(position.xCoord)) >> 4,
             ((int) Math.floor(position.yCoord)) >> 4,
-            ((int) Math.floor(position.zCoord)) >> 4
-        );
+            ((int) Math.floor(position.zCoord)) >> 4);
     }
 
     public boolean flushPendingEmissions() {
@@ -307,10 +291,6 @@ public class PollutionEmitter {
 
     public double getPropagationRange() {
         return effectiveRange;
-    }
-
-    public List<PropagationInfluencer> getInfluencers() {
-        return Collections.unmodifiableList(influencers);
     }
 
     public PropagationType getType() {

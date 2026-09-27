@@ -1,14 +1,22 @@
 package gregtech.common.propagation;
 
-import net.minecraft.util.Vec3;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.IdentityHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
 
-import java.util.*;
+import net.minecraft.util.Vec3;
 
 public class PropagationInfluencerSpatialIndex {
 
     private static final int BATCH_SIZE = 64;
 
     private static final Comparator<Vec3> BATCH_COMPARATOR = new Comparator<Vec3>() {
+
         @Override
         public int compare(Vec3 a, Vec3 b) {
             int x = Double.compare(a.xCoord, b.xCoord);
@@ -104,8 +112,7 @@ public class PropagationInfluencerSpatialIndex {
             getBatchCoordinate(position.zCoord - range),
             getBatchCoordinate(position.xCoord + range),
             getBatchCoordinate(position.yCoord + range),
-            getBatchCoordinate(position.zCoord + range)
-        );
+            getBatchCoordinate(position.zCoord + range));
     }
 
     private List<PropagationInfluencer> getOrCreate(Vec3 position) {

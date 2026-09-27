@@ -1,10 +1,10 @@
 package gregtech.common.propagation.debug;
 
-import gregtech.common.pollution.Pollution;
-import gregtech.common.propagation.PollutionManager;
-
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.Vec3;
+
+import gregtech.common.pollution.Pollution;
+import gregtech.common.propagation.PollutionManager;
 
 public class TileEntityPollutionTestInfluencer extends TileEntity {
 
@@ -16,11 +16,7 @@ public class TileEntityPollutionTestInfluencer extends TileEntity {
     public void updateEntity() {
         if (worldObj == null || worldObj.isRemote || registered) return;
 
-        Vec3 position = Vec3.createVectorHelper(
-            xCoord + 0.5D,
-            yCoord + 0.5D,
-            zCoord + 0.5D
-        );
+        Vec3 position = Vec3.createVectorHelper(xCoord + 0.5D, yCoord + 0.5D, zCoord + 0.5D);
 
         influencer = new DummyPollutionInfluencer(position);
         manager = Pollution.getPropagationManager(worldObj);

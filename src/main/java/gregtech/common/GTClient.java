@@ -13,10 +13,6 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.TreeSet;
 
-import gregtech.common.propagation.PollutionClientTickHandler;
-import gregtech.common.propagation.PollutionDebugRenderer;
-import gregtech.common.propagation.PollutionManager;
-import gregtech.common.propagation.PollutionQueryProfileClientState;
 import net.minecraft.block.Block;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityPlayerSP;
@@ -126,6 +122,10 @@ import gregtech.common.networkanalyzer.events.WorldOverlayRenderer;
 import gregtech.common.pollution.Pollution;
 import gregtech.common.pollution.PollutionRenderer;
 import gregtech.common.powergoggles.PowerGogglesCommand;
+import gregtech.common.propagation.PollutionClientTickHandler;
+import gregtech.common.propagation.PollutionDebugRenderer;
+import gregtech.common.propagation.PollutionManager;
+import gregtech.common.propagation.PollutionQueryProfileClientState;
 import gregtech.common.render.BaseMetaTileEntityRenderer;
 import gregtech.common.render.BlackholeRenderer;
 import gregtech.common.render.FlaskRenderer;
@@ -174,7 +174,6 @@ public class GTClient extends GTProxy {
     private boolean mFirstTick = false;
     private int mReloadCount;
     private float renderTickTime;
-
 
     @SideOnly(Side.CLIENT)
     private static MovementInput manualInputCheck;
@@ -540,10 +539,7 @@ public class GTClient extends GTProxy {
     }
 
     public PollutionManager getClientPollutionManager(int dimension) {
-        return clientPollutionManagers.computeIfAbsent(
-            dimension,
-            id -> new PollutionManager(id, false)
-        );
+        return clientPollutionManagers.computeIfAbsent(dimension, id -> new PollutionManager(id, false));
     }
 
     public void removeClientPollutionManager(int dimension) {
@@ -698,11 +694,6 @@ public class GTClient extends GTProxy {
         if (world == null) return;
 
         getClientPollutionManager(world.provider.dimensionId)
-            .setEmitterPollution(
-                chunk.chunkXPos,
-                70 >> 4,
-                chunk.chunkZPos,
-                pollution
-            );
+            .setEmitterPollution(chunk.chunkXPos, 70 >> 4, chunk.chunkZPos, pollution);
     }
 }

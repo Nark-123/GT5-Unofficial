@@ -44,8 +44,7 @@ public final class PollutionQueryProfiler {
             influencerCalls,
             influencerNoops,
             maxEmitterCandidates,
-            maxInfluencersPerEmitter
-        );
+            maxInfluencersPerEmitter);
     }
 
     public void reset() {
@@ -71,16 +70,8 @@ public final class PollutionQueryProfiler {
         public final int maxEmitterCandidates;
         public final int maxInfluencersPerEmitter;
 
-        public Snapshot(
-            long queries,
-            long queryNanos,
-            long emitterCandidates,
-            long emittersInsideRange,
-            long influencerCalls,
-            long influencerNoops,
-            int maxEmitterCandidates,
-            int maxInfluencersPerEmitter
-        ) {
+        public Snapshot(long queries, long queryNanos, long emitterCandidates, long emittersInsideRange,
+            long influencerCalls, long influencerNoops, int maxEmitterCandidates, int maxInfluencersPerEmitter) {
             this.queries = queries;
             this.queryNanos = queryNanos;
             this.emitterCandidates = emitterCandidates;
