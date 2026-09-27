@@ -316,7 +316,7 @@ public class Pollution {
 
         if (pollutionInstance == null) {
             pollutionInstance = getPollutionManager(aEvent.world);
-            LEGACY_STORAGE.migrateAll(aEvent.world);
+            migrateLegacyStorage(aEvent.world);
         }
 
         pollutionInstance.propagationManager.tick();
@@ -550,6 +550,14 @@ public class Pollution {
         return GTUtility.safeInt(Math.round(pollution * CLIENT_POLLUTION_SCALE));
     }
 
+    private static void migrateLegacyStorage(World world) {
+        PollutionSavedData data = PollutionSavedData.get(world);
+        if (data.isLegacyStorageMigrated()) return;
+
+        LEGACY_STORAGE.migrateAll(world);
+        data.setLegacyStorageMigrated();
+    }
+
     public static double getPollution(World world, int x, int y, int z) {
         if (!GTMod.proxy.mPollution) return 0.0D;
 
@@ -677,13 +685,7 @@ public class Pollution {
             if (e.world.isRemote) return;
 
             getPollutionManager(e.world);
-
-            PollutionSavedData data = PollutionSavedData.get(e.world);
-
-            if (!data.isLegacyStorageMigrated()) {
-                LEGACY_STORAGE.migrateAll(e.world);
-                data.setLegacyStorageMigrated();
-            }
+            migrateLegacyStorage(e.world);
         }
 
         @SubscribeEvent
