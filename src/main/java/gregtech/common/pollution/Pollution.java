@@ -62,6 +62,9 @@ public class Pollution {
     private int fullResyncCursor;
     private int fullResyncAccumulator;
 
+    @Deprecated
+    public static int mPlayerPollution;
+
     private static GT_PollutionEventHandler EVENT_HANDLER;
 
     public Pollution(World world) {
@@ -490,21 +493,14 @@ public class Pollution {
      * Legacy chunk-based API. Applies a one-shot pollution change at the chunk center.
      * Negative values reduce existing pollution and are clamped at zero.
      */
-    public static void addPollution(World w, int chunkX, int chunkZ, int aPollution) {
-        if (!GTMod.proxy.mPollution || aPollution == 0 || w.isRemote) return;
+    public static void addPollution(World world, int chunkX, int chunkZ, int pollution) {
+        if (!GTMod.proxy.mPollution || pollution == 0 || world.isRemote) return;
 
-        Vec3 position = Vec3.createVectorHelper(
+        getPropagationManager(world).addPollution(
             (chunkX << 4) + 8,
             70,
-            (chunkZ << 4) + 8
-        );
-
-        getPropagationManager(w).registerSource(
-            new PollutionBurstSource(
-                w.provider.dimensionId,
-                position,
-                aPollution
-            )
+            (chunkZ << 4) + 8,
+            pollution
         );
     }
 
@@ -572,17 +568,7 @@ public class Pollution {
 
     public static boolean hasPollution(Chunk ch) {
         if (!GTMod.proxy.mPollution) return false;
-
-        if (ch.worldObj.isRemote) {
-            return getPollution(ch) > 0;
-        }
-
-        return getPollution(
-            ch.worldObj,
-            (ch.xPosition << 4) + 8,
-            70,
-            (ch.zPosition << 4) + 8
-        ) >= 1.0D;
+        return getPollution(ch) > 0;
     }
 
     // Migrates the legacy GTPOLLUTION chunk NBT tag into the propagation system.

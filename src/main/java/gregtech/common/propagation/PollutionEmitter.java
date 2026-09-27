@@ -83,13 +83,14 @@ public class PollutionEmitter {
     public boolean update() {
         double incomingPollution = 0.0D;
 
-        for (PropagationSource source : sources) {
-            if (!source.isValid()) continue;
+        Iterator<PropagationSource> iterator = sources.iterator();
 
+        while (iterator.hasNext()) {
+            PropagationSource source = iterator.next();
             double emission = source.consumeEmission();
-            if (emission == 0.0D) continue;
 
-            incomingPollution += emission;
+            if (emission != 0.0D) incomingPollution += emission;
+            if (!source.isValid()) iterator.remove();
         }
 
         double oldPollution = pollution;
@@ -183,6 +184,25 @@ public class PollutionEmitter {
             ((int) Math.floor(position.yCoord)) >> 4,
             ((int) Math.floor(position.zCoord)) >> 4
         );
+    }
+
+    public boolean flushPendingEmissions() {
+        double incomingPollution = 0.0D;
+        Iterator<PropagationSource> iterator = sources.iterator();
+
+        while (iterator.hasNext()) {
+            PropagationSource source = iterator.next();
+            double emission = source.consumeEmission();
+
+            if (emission != 0.0D) incomingPollution += emission;
+            if (!source.isValid()) iterator.remove();
+        }
+
+        if (incomingPollution == 0.0D) return false;
+
+        double oldPollution = pollution;
+        pollution = Math.max(0.0D, pollution + incomingPollution);
+        return pollution != oldPollution;
     }
 
     public void setRangeMultiplier(double multiplier) {

@@ -665,6 +665,7 @@ public class GTClient extends GTProxy {
         super.onWorldUnload(event);
 
         if (event.world.isRemote) {
+            VacuumConveyorPipeClientStateManager.INSTANCE.clear();
             removeClientPollutionManager(event.world.provider.dimensionId);
         }
 

@@ -241,6 +241,8 @@ public class PollutionManager implements PropagationManager {
         NBTTagList emitterList = new NBTTagList();
 
         for (PollutionEmitter emitter : emitters) {
+            if (emitter.flushPendingEmissions()) dirtyEmitters.add(emitter);
+
             double pollution = emitter.getPollution();
 
             if (pollution <= 0.0D) {
