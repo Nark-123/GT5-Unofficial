@@ -17,6 +17,7 @@ import java.util.Arrays;
 import java.util.Locale;
 import java.util.Map;
 
+import gregtech.common.propagation.debug.PollutionDebugBlocks;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.init.Blocks;
 import net.minecraft.init.Items;
@@ -322,6 +323,8 @@ public class GTMod {
         PowerGogglesConfigHandler.init(new File(event.getModConfigurationDirectory() + "/GregTech/Goggles.cfg"));
 
         proxy.onPreInitialization(event);
+
+        PollutionDebugBlocks.register();
 
         GT_FML_LOGGER.debug("GTMod: Setting Configs");
 

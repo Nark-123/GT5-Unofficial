@@ -56,7 +56,7 @@ dependencies {
     compileOnly('com.github.GTNewHorizons:Baubles-Expanded:2.2.23-GTNH:dev') {transitive=false}
 
     devOnlyNonPublishable("com.github.GTNewHorizons:Infernal-Mobs:1.10.6-GTNH:dev")
-
+    devOnlyNonPublishable('com.github.GTNewHorizons:worldedit-gtnh:v0.0.9')
     devOnlyNonPublishable("com.github.GTNewHorizons:Avaritia:1.99:dev")
 
     compileOnlyApi("com.github.GTNewHorizons:AppleCore:3.3.12:dev") { transitive = false }
