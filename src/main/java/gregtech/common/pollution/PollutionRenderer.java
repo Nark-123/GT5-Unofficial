@@ -182,6 +182,12 @@ public class PollutionRenderer {
             MathHelper.floor_double(player.posZ)
         );
 
+        Pollution.mPlayerPollution = Pollution.getPollution(
+            player.worldObj,
+            MathHelper.floor_double(player.posX) >> 4,
+            MathHelper.floor_double(player.posZ) >> 4
+        );
+
         float intensity = (float) ((playerPollution - PARTICLES_POLLUTION_START) / PARTICLES_POLLUTION_END);
         if (intensity < 0) return;
         else if (intensity > 1) intensity = 1;
@@ -229,5 +235,32 @@ public class PollutionRenderer {
         Minecraft.getMinecraft().fontRenderer.drawStringWithShadow(text, 0, off, 0xFFFFFFFF);
         GL11.glDisable(GL11.GL_BLEND);
         GL11.glPopMatrix();
+    }
+
+    @Deprecated
+    public int getKnownPollution(int x, int z) {
+        Minecraft mc = Minecraft.getMinecraft();
+        if (mc.theWorld == null) return 0;
+
+        return Pollution.getPollution(
+            mc.theWorld,
+            x >> 4,
+            z >> 4
+        );
+    }
+
+    @Deprecated
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public void onWorldUnload(WorldEvent.Unload event) {
+        if (!event.world.isRemote) return;
+
+        GTMod.clientProxy()
+            .removeClientPollutionManager(event.world.provider.dimensionId);
+    }
+
+    @Deprecated
+    public void processPacket(ChunkCoordIntPair chunk, int pollution) {
+        GTMod.clientProxy()
+            .processChunkPollutionPacket(chunk, pollution);
     }
 }

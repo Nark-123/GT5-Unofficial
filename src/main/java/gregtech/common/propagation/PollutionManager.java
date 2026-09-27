@@ -190,12 +190,13 @@ public class PollutionManager implements PropagationManager {
 
             PollutionEmitter emitter = emitters.get(updateCursor);
 
+            if (emitter.update()) dirtyEmitters.add(emitter);
+
             if (!emitter.isValid()) {
                 unregisterEmitter(emitter);
                 continue;
             }
 
-            if (emitter.update()) dirtyEmitters.add(emitter);
             updateCursor++;
         }
     }
@@ -241,6 +242,8 @@ public class PollutionManager implements PropagationManager {
         NBTTagList emitterList = new NBTTagList();
 
         for (PollutionEmitter emitter : emitters) {
+            if (emitter.flushPendingEmissions()) dirtyEmitters.add(emitter);
+
             double pollution = emitter.getPollution();
 
             if (pollution <= 0.0D) {

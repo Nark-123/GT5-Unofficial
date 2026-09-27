@@ -33,6 +33,7 @@ import net.minecraft.util.MovementInput;
 import net.minecraft.util.MovementInputFromOptions;
 import net.minecraft.util.StatCollector;
 import net.minecraft.world.ChunkCoordIntPair;
+import net.minecraft.world.World;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraftforge.client.ClientCommandHandler;
 import net.minecraftforge.client.IItemRenderer;
@@ -665,6 +666,7 @@ public class GTClient extends GTProxy {
         super.onWorldUnload(event);
 
         if (event.world.isRemote) {
+            VacuumConveyorPipeClientStateManager.INSTANCE.clear();
             removeClientPollutionManager(event.world.provider.dimensionId);
         }
 
@@ -683,5 +685,19 @@ public class GTClient extends GTProxy {
             event.world,
             event.getChunk()
                 .getChunkCoordIntPair());
+    }
+
+    @Deprecated
+    public void processChunkPollutionPacket(ChunkCoordIntPair chunk, int pollution) {
+        World world = Minecraft.getMinecraft().theWorld;
+        if (world == null) return;
+
+        getClientPollutionManager(world.provider.dimensionId)
+            .setEmitterPollution(
+                chunk.chunkXPos,
+                70 >> 4,
+                chunk.chunkZPos,
+                pollution
+            );
     }
 }
