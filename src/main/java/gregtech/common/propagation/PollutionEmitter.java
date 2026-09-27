@@ -3,6 +3,7 @@ package gregtech.common.propagation;
 import net.minecraft.util.Vec3;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
@@ -24,6 +25,11 @@ public class PollutionEmitter {
     private double effectiveRange;
     private double inverseRangeSquared;
     private double gaussianNormalization;
+    private double effectiveRangeSquared;
+    private boolean pollutionChanged;
+    private long propagationRevision;
+    private double propagationRange;
+
 
     public PollutionEmitter(int dimension, Vec3 cellPosition, double propagationRange) {
         this(
@@ -45,6 +51,7 @@ public class PollutionEmitter {
         this.smoothing = smoothing;
         this.center = getCellCenter(cellPosition);
         this.basePropagationRange = propagationRange;
+        this.propagationRange = propagationRange;
         recalculatePropagationRange();
     }
 
@@ -75,8 +82,20 @@ public class PollutionEmitter {
         }
     }
 
-    public void removeSource(PropagationSource source) {
-        sources.remove(source);
+    public boolean removeSource(PropagationSource source) {
+        if (!sources.remove(source)) {
+            return false;
+        }
+
+        double emission = source.consumeEmission();
+        if (emission == 0.0D) {
+            return false;
+        }
+
+        double oldPollution = pollution;
+        pollution = Math.max(0.0D, pollution + emission);
+
+        return pollution != oldPollution;
     }
 
     // Scheduled approximately once every 20 ticks per emitter.
@@ -96,13 +115,13 @@ public class PollutionEmitter {
         double oldPollution = pollution;
 
         if (incomingPollution != 0.0D) {
-             pollution = Math.max(0.0D, pollution + incomingPollution);
+            pollution = Math.max(0.0D, pollution + incomingPollution);
         }
 
         boolean changed = pollution != oldPollution;
         pollution *= smoothing;
 
-        if (pollution < 1.0E-9D) pollution = 0.0D;
+        if (pollution < 1.0E-2D) pollution = 0.0D;
 
         return changed;
     }
@@ -112,18 +131,23 @@ public class PollutionEmitter {
             return 0.0D;
         }
 
-        double distance = center.distanceTo(pos);
+        double dx = center.xCoord - pos.xCoord;
+        double dy = center.yCoord - pos.yCoord;
+        double dz = center.zCoord - pos.zCoord;
 
-        if (distance > effectiveRange) {
+        double distanceSquared = (dx * dx) + (dy * dy) + (dz * dz);
+
+        if (distanceSquared > effectiveRangeSquared) {
             return 0.0D;
         }
 
-        double distanceSquared = distance * distance;
-
         double influence = pollution / gaussianNormalization * Math.exp(-4.5D * distanceSquared * inverseRangeSquared);
 
-        InfluenceVector vector =
-            new InfluenceVector(center, pos);
+        if (influencers.isEmpty()) {
+            return influence;
+        }
+
+        InfluenceVector vector = new InfluenceVector(center, pos);
 
         for (PropagationInfluencer influencer : influencers) {
             influence *= influencer.influence(pos, vector);
@@ -166,16 +190,26 @@ public class PollutionEmitter {
     }
 
     private void recalculatePropagationRange() {
-        effectiveRange = basePropagationRange * rangeMultiplier;
-        double rangeSquared = effectiveRange * effectiveRange;
-        inverseRangeSquared = 1.0D / rangeSquared;
+        effectiveRange = propagationRange * rangeMultiplier;
+        effectiveRangeSquared = effectiveRange * effectiveRange;
+        inverseRangeSquared = 1.0D / effectiveRangeSquared;
 
         gaussianNormalization =
             Math.pow(2.0D * Math.PI, 1.5D)
                 * effectiveRange
-                * rangeSquared
+                * effectiveRangeSquared
                 / 27.0D
                 * GAUSSIAN_3_SIGMA_MASS;
+    }
+
+    private void setPropagationRange(double range) {
+        range = Math.max(basePropagationRange, range);
+
+        if (propagationRange == range) return;
+
+        propagationRange = range;
+        recalculatePropagationRange();
+        propagationRevision++;
     }
 
     private Vec3 getCellPosition(Vec3 position) {
@@ -207,17 +241,31 @@ public class PollutionEmitter {
 
     public void setRangeMultiplier(double multiplier) {
         if (multiplier <= 0.0D) {
-            throw new IllegalArgumentException(
-                "Range multiplier must be > 0"
-            );
+            throw new IllegalArgumentException("Range multiplier must be > 0");
         }
 
-        if (rangeMultiplier == multiplier) {
-            return;
-        }
+        if (rangeMultiplier == multiplier) return;
 
         rangeMultiplier = multiplier;
         recalculatePropagationRange();
+        propagationRevision++;
+    }
+
+    public void setPollution(double pollution) {
+        double newPollution = Math.max(0.0D, pollution);
+
+        if (this.pollution == newPollution) {
+            return;
+        }
+
+        this.pollution = newPollution;
+        pollutionChanged = true;
+    }
+
+    boolean consumePollutionChanged() {
+        boolean changed = pollutionChanged;
+        pollutionChanged = false;
+        return changed;
     }
 
     public Vec3 getPosition() {
@@ -233,7 +281,7 @@ public class PollutionEmitter {
     }
 
     public List<PropagationInfluencer> getInfluencers() {
-        return influencers;
+        return Collections.unmodifiableList(influencers);
     }
 
     public PropagationType getType() {
@@ -248,16 +296,24 @@ public class PollutionEmitter {
         return !sources.isEmpty();
     }
 
+    public long getPropagationRevision() {
+        return propagationRevision;
+    }
+
     public int getDimension() {
         return dimension;
     }
 
-    public double getPollution() {
-        return pollution;
+    public double getBasePropagationRange() {
+        return basePropagationRange;
     }
 
-    public void setPollution(double pollution) {
-        this.pollution = Math.max(0.0D, pollution);
+    public double getPhysicalPropagationRange() {
+        return propagationRange;
+    }
+
+    public double getPollution() {
+        return pollution;
     }
 
     public Vec3 getCenter() {

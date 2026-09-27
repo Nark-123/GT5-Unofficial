@@ -2,15 +2,14 @@ package gregtech.common.propagation;
 
 import net.minecraft.util.Vec3;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;
+import java.util.*;
 
 public class PropagationSpatialIndex {
 
     private static final int BATCH_SIZE = 64;
+
+    private final Map<PollutionEmitter, PropagationBatchBounds> emitterBounds = new IdentityHashMap<>();
+    private final Map<PollutionEmitter, Long> emitterRevisions = new IdentityHashMap<>();
 
     private static final Comparator<Vec3> BATCH_COMPARATOR = new Comparator<Vec3>() {
         @Override
@@ -29,49 +28,126 @@ public class PropagationSpatialIndex {
 
 
     public void add(PollutionEmitter emitter) {
-        Vec3 pos = emitter.getPosition();
-        double range = emitter.getPropagationRange();
+        PropagationBatchBounds bounds = getRequiredBounds(emitter);
 
-        Vec3 min = getBatchPosition(Vec3.createVectorHelper(
-            pos.xCoord - range,
-            pos.yCoord - range,
-            pos.zCoord - range
-        ));
+        for (int x = bounds.minX; x <= bounds.maxX; x++) {
+            for (int y = bounds.minY; y <= bounds.maxY; y++) {
+                for (int z = bounds.minZ; z <= bounds.maxZ; z++) {
+                    getOrCreate(
+                        Vec3.createVectorHelper(x, y, z)
+                    ).add(emitter);
+                }
+            }
+        }
 
-        Vec3 max = getBatchPosition(Vec3.createVectorHelper(
-            pos.xCoord + range,
-            pos.yCoord + range,
-            pos.zCoord + range
-        ));
+        emitterBounds.put(emitter, bounds);
+        emitterRevisions.put(emitter, emitter.getPropagationRevision());
+    }
 
-        for (int x = (int) min.xCoord; x <= (int) max.xCoord; x++) {
-            for (int y = (int) min.yCoord; y <= (int) max.yCoord; y++) {
-                for (int z = (int) min.zCoord; z <= (int) max.zCoord; z++) {
+    public boolean ensureCoverage(PollutionEmitter emitter) {
+        long revision = emitter.getPropagationRevision();
+        Long indexedRevision = emitterRevisions.get(emitter);
+
+        if (indexedRevision != null && indexedRevision == revision) return false;
+
+        emitterRevisions.put(emitter, revision);
+
+        PropagationBatchBounds current = emitterBounds.get(emitter);
+
+        if (current == null) {
+            add(emitter);
+            return true;
+        }
+
+        PropagationBatchBounds required = getRequiredBounds(emitter);
+
+        if (current.contains(required)) return false;
+
+        PropagationBatchBounds expanded = current.expandToInclude(required);
+
+        for (int x = expanded.minX; x <= expanded.maxX; x++) {
+            for (int y = expanded.minY; y <= expanded.maxY; y++) {
+                for (int z = expanded.minZ; z <= expanded.maxZ; z++) {
+                    if (current.contains(x, y, z)) continue;
+
                     getOrCreate(Vec3.createVectorHelper(x, y, z)).add(emitter);
                 }
             }
         }
+
+        emitterBounds.put(emitter, expanded);
+        return true;
     }
 
+    private PropagationBatchBounds getRequiredBounds(PollutionEmitter emitter) {
+        return getRequiredBounds(emitter.getPosition(), emitter.getPropagationRange());
+    }
+
+    private PropagationBatchBounds getRequiredBounds(Vec3 position, double range) {
+        return new PropagationBatchBounds(
+            getBatchCoordinate(position.xCoord - range),
+            getBatchCoordinate(position.yCoord - range),
+            getBatchCoordinate(position.zCoord - range),
+            getBatchCoordinate(position.xCoord + range),
+            getBatchCoordinate(position.yCoord + range),
+            getBatchCoordinate(position.zCoord + range)
+        );
+    }
 
     public void remove(PollutionEmitter emitter) {
-        for (java.util.Iterator<Map.Entry<Vec3, List<PollutionEmitter>>> iterator = batches.entrySet().iterator(); iterator.hasNext();) {
-            Map.Entry<Vec3, List<PollutionEmitter>> entry = iterator.next();
+        PropagationBatchBounds bounds = emitterBounds.remove(emitter);
 
-            entry.getValue().remove(emitter);
+        if (bounds == null) {
+            return;
+        }
 
-            if (entry.getValue().isEmpty()) {
-                iterator.remove();
+        for (int x = bounds.minX; x <= bounds.maxX; x++) {
+            for (int y = bounds.minY; y <= bounds.maxY; y++) {
+                for (int z = bounds.minZ; z <= bounds.maxZ; z++) {
+                    Vec3 batch = Vec3.createVectorHelper(x, y, z);
+                    List<PollutionEmitter> list = batches.get(batch);
+
+                    if (list == null) {
+                        continue;
+                    }
+
+                    list.remove(emitter);
+
+                    if (list.isEmpty()) {
+                        batches.remove(batch);
+                    }
+                }
             }
         }
+
+        emitterRevisions.remove(emitter);
     }
 
+
+    public Set<PollutionEmitter> get(Vec3 position, double range) {
+        PropagationBatchBounds bounds = getRequiredBounds(position, range);
+        Set<PollutionEmitter> result = Collections.newSetFromMap(new IdentityHashMap<>());
+
+        for (int x = bounds.minX; x <= bounds.maxX; x++) {
+            for (int y = bounds.minY; y <= bounds.maxY; y++) {
+                for (int z = bounds.minZ; z <= bounds.maxZ; z++) {
+                    List<PollutionEmitter> entries = batches.get(Vec3.createVectorHelper(x, y, z));
+
+                    if (entries != null) {
+                        result.addAll(entries);
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
 
     public List<PollutionEmitter> get(Vec3 position) {
         List<PollutionEmitter> result = batches.get(getBatchPosition(position));
 
         if (result == null) {
-            return java.util.Collections.emptyList();
+            return Collections.emptyList();
         }
 
         return result;
@@ -91,8 +167,51 @@ public class PropagationSpatialIndex {
         );
     }
 
-
     private int getBatchCoordinate(double coordinate) {
         return (int) Math.floor(coordinate / BATCH_SIZE);
+    }
+
+
+    private static final class BatchBounds {
+        final int minX, minY, minZ;
+        final int maxX, maxY, maxZ;
+
+        BatchBounds(
+            int minX, int minY, int minZ,
+            int maxX, int maxY, int maxZ
+        ) {
+            this.minX = minX;
+            this.minY = minY;
+            this.minZ = minZ;
+            this.maxX = maxX;
+            this.maxY = maxY;
+            this.maxZ = maxZ;
+        }
+
+        boolean contains(BatchBounds other) {
+            return other.minX >= minX
+                && other.minY >= minY
+                && other.minZ >= minZ
+                && other.maxX <= maxX
+                && other.maxY <= maxY
+                && other.maxZ <= maxZ;
+        }
+
+        boolean contains(int x, int y, int z) {
+            return x >= minX && x <= maxX
+                && y >= minY && y <= maxY
+                && z >= minZ && z <= maxZ;
+        }
+
+        BatchBounds expandToInclude(BatchBounds other) {
+            return new BatchBounds(
+                Math.min(minX, other.minX),
+                Math.min(minY, other.minY),
+                Math.min(minZ, other.minZ),
+                Math.max(maxX, other.maxX),
+                Math.max(maxY, other.maxY),
+                Math.max(maxZ, other.maxZ)
+            );
+        }
     }
 }
