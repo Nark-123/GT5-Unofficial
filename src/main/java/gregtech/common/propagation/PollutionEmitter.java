@@ -6,6 +6,8 @@ import java.util.List;
 
 import net.minecraft.util.Vec3;
 
+import it.unimi.dsi.fastutil.longs.Long2DoubleOpenHashMap;
+
 public class PollutionEmitter {
 
     // Approximately 24-hour half-life at one decay step per second.
@@ -19,6 +21,7 @@ public class PollutionEmitter {
     private final double smoothing;
     private double pollution;
     private final List<InfluenceVector> influencers = new ArrayList<>();
+    private final Long2DoubleOpenHashMap influencerFactorCache = new Long2DoubleOpenHashMap();
     private static final double GAUSSIAN_3_SIGMA_MASS = 0.9707091135D;
     private final double basePropagationRange;
     private double rangeMultiplier = 1.0D;
@@ -29,6 +32,8 @@ public class PollutionEmitter {
     private boolean pollutionChanged;
     private long propagationRevision;
     private double propagationRange;
+
+    private static final double LOG2_E = 1.4426950408889634D;
 
     public PollutionEmitter(int dimension, Vec3 cellPosition, double propagationRange) {
         this(dimension, cellPosition, propagationRange, DEFAULT_SMOOTHING);
@@ -41,6 +46,7 @@ public class PollutionEmitter {
         this.center = getCellCenter(cellPosition);
         this.basePropagationRange = propagationRange;
         this.propagationRange = propagationRange;
+        influencerFactorCache.defaultReturnValue(Double.NaN);
         recalculatePropagationRange();
     }
 
@@ -110,6 +116,21 @@ public class PollutionEmitter {
         return changed;
     }
 
+    private static double fastExpNeg(double x) {
+        double y = x * LOG2_E;
+
+        int n = (int) y;
+        double f = y - n;
+
+        double p = ((-0.03951000D * f + 0.23059332D) * f - 0.69107581D) * f
+            + 0.99989849D;
+
+        long scaleBits = (long) (1023 - n) << 52;
+        double scale = Double.longBitsToDouble(scaleBits);
+
+        return scale * p;
+    }
+
     public double getInfluenceProfiled(Vec3 pos, PollutionQueryProfiler profiler) {
         if (pollution <= 0.0D) return 0.0D;
 
@@ -123,7 +144,7 @@ public class PollutionEmitter {
 
         profiler.emitterInsideRange(influencers.size());
 
-        double influence = pollution / gaussianNormalization * Math.exp(-4.5D * distanceSquared * inverseRangeSquared);
+        double influence = pollution / gaussianNormalization * fastExpNeg(4.5D * distanceSquared * inverseRangeSquared);
 
         if (influencers.isEmpty()) return influence;
 

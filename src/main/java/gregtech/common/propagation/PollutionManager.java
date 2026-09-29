@@ -40,7 +40,6 @@ public class PollutionManager implements PropagationManager {
     private int queryProfileTicks;
 
     private static final Comparator<Vec3> CELL_COMPARATOR = new Comparator<Vec3>() {
-
         @Override
         public int compare(Vec3 a, Vec3 b) {
             int x = Double.compare(a.xCoord, b.xCoord);
@@ -112,6 +111,7 @@ public class PollutionManager implements PropagationManager {
 
         if (existing == emitter) return;
 
+        //I guess this may produce an incorrect result
         if (existing != null) {
             unregisterEmitter(existing);
         }

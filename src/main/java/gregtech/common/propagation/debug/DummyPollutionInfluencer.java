@@ -15,12 +15,28 @@ public class DummyPollutionInfluencer implements PropagationInfluencer {
     private static final double L_DOWN = 80.0D;
     private static final double SIGMA0 = 5.0D;
     private static final double DIFFUSION = 8.0D;
+    private static final double LOG2_E = 1.4426950408889634D;
 
     private final Vec3 position;
     private boolean valid = true;
 
     public DummyPollutionInfluencer(Vec3 position) {
         this.position = position;
+    }
+
+    private static double fastExpNeg(double x) {
+        double y = x * LOG2_E;
+
+        int n = (int) y;
+        double f = y - n;
+
+        double p = ((-0.03951000D * f + 0.23059332D) * f - 0.69107581D) * f
+            + 0.99989849D;
+
+        long scaleBits = (long) (1023 - n) << 52;
+        double scale = Double.longBitsToDouble(scaleBits);
+
+        return scale * p;
     }
 
     @Override
@@ -40,14 +56,14 @@ public class DummyPollutionInfluencer implements PropagationInfluencer {
         double s = rx * dx + ry * dy + rz * dz;
         double rho2 = Math.max(0.0D, r2 - s * s);
 
-        double core = Math.exp(-r2 / (2.0D * SIGMA_CORE * SIGMA_CORE));
+        double core = fastExpNeg(r2 / (2.0D * SIGMA_CORE * SIGMA_CORE));
 
         double l = s < 0.0D ? L_UP : L_DOWN;
         double downstream = Math.max(s, 0.0D);
 
         double sigma2 = SIGMA0 * SIGMA0 + 2.0D * DIFFUSION * downstream;
 
-        double wake = Math.exp(-(s * s) / (l * l) - rho2 / (2.0D * sigma2));
+        double wake = fastExpNeg(-(-(s * s) / (l * l) - rho2 / (2.0D * sigma2)));
 
         double combined = core + wake - core * wake;
         return 1.0D - ETA_MAX * combined;
