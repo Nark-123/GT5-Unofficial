@@ -310,7 +310,7 @@ public class MTEAtmosphericReconditioner extends MTEBasicMachine {
     public int getCurrentChunkPollution() {
         int mCurrentChunkPollution = 0;
         if (this.mTier < 7) {
-            mCurrentChunkPollution = Pollution.getPollution(getBaseMetaTileEntity());
+            mCurrentChunkPollution = Pollution.getLegacyPollution(getBaseMetaTileEntity());
         } else {
             ArrayList<Chunk> aSurrounding = new ArrayList<>();
             World aWorld = this.getBaseMetaTileEntity()
@@ -346,7 +346,7 @@ public class MTEAtmosphericReconditioner extends MTEBasicMachine {
     }
 
     public int getPollutionInChunk(Chunk aChunk) {
-        int mCurrentChunkPollution = Pollution.getPollution(aChunk);
+        int mCurrentChunkPollution = Pollution.getLegacyPollution(aChunk);
         mHasPollution = mCurrentChunkPollution > 0;
         return mCurrentChunkPollution;
     }

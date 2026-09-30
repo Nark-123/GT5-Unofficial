@@ -125,7 +125,7 @@ public class MTEHatchMuffler extends MTEHatch {
         boolean chk1, chk2, chk3;
         float ran1 = XSTR_INSTANCE.nextFloat(), ran2, ran3;
         chk1 = ran1 * 100 < calculatePollutionReduction(100);
-        if (Pollution.getPollution(getBaseMetaTileEntity()) >= GTMod.proxy.mPollutionSmogLimit) {
+        if (Pollution.getLegacyPollution(getBaseMetaTileEntity()) >= GTMod.proxy.mPollutionSmogLimit) {
             ran2 = XSTR_INSTANCE.nextFloat();
             ran3 = XSTR_INSTANCE.nextFloat();
             chk2 = ran2 * 100 < calculatePollutionReduction(100);
@@ -200,23 +200,36 @@ public class MTEHatchMuffler extends MTEHatch {
      * @param pollutionAmount How much pollution to output. Reduced by muffler efficiency.
      * @return pollution success
      */
-    public boolean polluteEnvironment(MetaTileEntity mte, int pollutionAmount) {
+    public boolean polluteEnvironment(
+        MetaTileEntity mte,
+        int pollutionAmount) {
+
         if (!getBaseMetaTileEntity().getAirAtSide(getBaseMetaTileEntity().getFrontFacing())) {
+
             return false;
         }
 
-        int emittedPollution = calculatePollutionReduction(pollutionAmount);
+        int legacyEmission =
+            calculatePollutionReduction(pollutionAmount);
 
-        getOrCreatePropagationSource().addPollution((double) emittedPollution);
+        double emission =
+            Pollution.fromLegacyPollution(legacyEmission);
 
-        if (emittedPollution > 0) {
-            Pollution.polluteCleanroom((TileEntity) getBaseMetaTileEntity());
+        getOrCreatePropagationSource()
+            .addPollution(emission);
+
+        if (legacyEmission > 0) {
+            Pollution.polluteCleanroom(
+                (TileEntity) getBaseMetaTileEntity());
         }
+
         return true;
     }
 
     private PollutionSource getOrCreatePropagationSource() {
-        if (pollutionSource != null) return pollutionSource;
+        if (pollutionSource != null && pollutionSource.isValid()) {
+            return pollutionSource;
+        }
 
         pollutionSource = new PollutionSource(this);
 
@@ -228,11 +241,11 @@ public class MTEHatchMuffler extends MTEHatch {
 
     @Override
     public void onRemoval() {
-        removeSource();
+        invalidatePollutionSource();
         super.onRemoval();
     }
 
-    public void removeSource() {
+    private void invalidatePollutionSource() {
         if (pollutionSource == null) {
             return;
         }

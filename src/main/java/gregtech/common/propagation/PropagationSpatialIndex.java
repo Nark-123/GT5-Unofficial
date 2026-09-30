@@ -11,12 +11,12 @@ import java.util.TreeMap;
 
 import net.minecraft.util.Vec3;
 
-public class PropagationSpatialIndex {
+public class PropagationSpatialIndex<E extends PropagationEmitter> {
 
     private static final int BATCH_SIZE = 64;
 
-    private final Map<PollutionEmitter, PropagationBatchBounds> emitterBounds = new IdentityHashMap<>();
-    private final Map<PollutionEmitter, Long> emitterRevisions = new IdentityHashMap<>();
+    private final Map<E, PropagationBatchBounds> emitterBounds = new IdentityHashMap<>();
+    private final Map<E, Long> emitterRevisions = new IdentityHashMap<>();
 
     private static final Comparator<Vec3> BATCH_COMPARATOR = new Comparator<Vec3>() {
 
@@ -32,9 +32,9 @@ public class PropagationSpatialIndex {
         }
     };
 
-    private final Map<Vec3, List<PollutionEmitter>> batches = new TreeMap<>(BATCH_COMPARATOR);
+    private final Map<Vec3, List<E>> batches = new TreeMap<>(BATCH_COMPARATOR);
 
-    public void add(PollutionEmitter emitter) {
+    public void add(E emitter) {
         if (emitterBounds.containsKey(emitter)) {
             return;
         }
@@ -53,7 +53,7 @@ public class PropagationSpatialIndex {
         emitterRevisions.put(emitter, emitter.getPropagationRevision());
     }
 
-    public boolean ensureCoverage(PollutionEmitter emitter) {
+    public boolean ensureCoverage(E emitter) {
         long revision = emitter.getPropagationRevision();
         Long indexedRevision = emitterRevisions.get(emitter);
 
@@ -88,7 +88,7 @@ public class PropagationSpatialIndex {
         return true;
     }
 
-    private PropagationBatchBounds getRequiredBounds(PollutionEmitter emitter) {
+    private PropagationBatchBounds getRequiredBounds(E emitter) {
         return getRequiredBounds(emitter.getPosition(), emitter.getPropagationRange());
     }
 
@@ -102,7 +102,7 @@ public class PropagationSpatialIndex {
             getBatchCoordinate(position.zCoord + range));
     }
 
-    public void remove(PollutionEmitter emitter) {
+    public void remove(E emitter) {
         PropagationBatchBounds bounds = emitterBounds.remove(emitter);
 
         if (bounds == null) {
@@ -113,7 +113,7 @@ public class PropagationSpatialIndex {
             for (int y = bounds.minY; y <= bounds.maxY; y++) {
                 for (int z = bounds.minZ; z <= bounds.maxZ; z++) {
                     Vec3 batch = Vec3.createVectorHelper(x, y, z);
-                    List<PollutionEmitter> list = batches.get(batch);
+                    List<E> list = batches.get(batch);
 
                     if (list == null) {
                         continue;
@@ -131,14 +131,14 @@ public class PropagationSpatialIndex {
         emitterRevisions.remove(emitter);
     }
 
-    public Set<PollutionEmitter> get(Vec3 position, double range) {
+    public Set<E> get(Vec3 position, double range) {
         PropagationBatchBounds bounds = getRequiredBounds(position, range);
-        Set<PollutionEmitter> result = Collections.newSetFromMap(new IdentityHashMap<>());
+        Set<E> result = Collections.newSetFromMap(new IdentityHashMap<>());
 
         for (int x = bounds.minX; x <= bounds.maxX; x++) {
             for (int y = bounds.minY; y <= bounds.maxY; y++) {
                 for (int z = bounds.minZ; z <= bounds.maxZ; z++) {
-                    List<PollutionEmitter> entries = batches.get(Vec3.createVectorHelper(x, y, z));
+                    List<E> entries = batches.get(Vec3.createVectorHelper(x, y, z));
 
                     if (entries != null) {
                         result.addAll(entries);
@@ -150,8 +150,8 @@ public class PropagationSpatialIndex {
         return result;
     }
 
-    public List<PollutionEmitter> get(Vec3 position) {
-        List<PollutionEmitter> result = batches.get(getBatchPosition(position));
+    public List<E> get(Vec3 position) {
+        List<E> result = batches.get(getBatchPosition(position));
 
         if (result == null) {
             return Collections.emptyList();
@@ -160,7 +160,7 @@ public class PropagationSpatialIndex {
         return result;
     }
 
-    private List<PollutionEmitter> getOrCreate(Vec3 position) {
+    private List<E> getOrCreate(Vec3 position) {
         return batches.computeIfAbsent(position, k -> new ArrayList<>());
     }
 

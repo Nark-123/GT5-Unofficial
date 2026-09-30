@@ -480,7 +480,7 @@ public class ScannerHelper {
         list.add(addTitleComp("title_chunk_info"));
         if (Pollution.hasPollution(currentChunk)) {
             list.add(
-                transComp("chunk_info_1", goldComp(formatNumber(Pollution.getPollution(currentChunk))))
+                transComp("chunk_info_1", goldComp(formatNumber(Pollution.getLegacyPollution(currentChunk))))
                     .setChatStyle(new ChatStyle().setColor(EnumChatFormatting.RED)));
         } else {
             list.add(transComp("chunk_info_2").setChatStyle(new ChatStyle().setColor(EnumChatFormatting.GREEN)));

@@ -30,11 +30,11 @@ public class PollutionRenderer {
     private static final int PARTICLES_MAX_NUM = 100;
     private static final int END_MAX_DISTANCE = 192 - 1;
 
-    private static final double PARTICLES_POLLUTION_START = 0.8D;
-    private static final double PARTICLES_POLLUTION_END = 7.0D;
-    private static final double FOG_START_AT_POLLUTION = 0.8D;
-    private static final double FOG_MAX_AT_POLLUTION = 14.0D;
+    private static final int PARTICLES_POLLUTION_START = 400_000;
+    private static final int PARTICLES_POLLUTION_END = 3_500_000;
 
+    private static final int FOG_START_AT_POLLUTION = 400_000;
+    private static final int FOG_MAX_AT_POLLUTION = 7_000_000;
     private static final double FOG_START_EXP_RATIO = 0.02D;
 
     private static final float[] FOG_COLOR = { 0.3f, 0.25f, 0.1f };
@@ -68,19 +68,39 @@ public class PollutionRenderer {
     }
 
     public int colorGrass(int oColor, int x, int z) {
-        return color(oColor, getPollution(x, z), 0.7D, 1.2D, GRASS_COLOR);
+        return color(
+            oColor,
+            getPollution(x, z),
+            Pollution.fromLegacyPollution(350_000),
+            Pollution.fromLegacyPollution(600_000),
+            GRASS_COLOR);
     }
 
     public int colorLeaves(int oColor, int x, int z) {
-        return color(oColor, getPollution(x, z), 0.6D, 1.0D, LEAVES_COLOR);
+        return color(
+            oColor,
+            getPollution(x, z),
+            Pollution.fromLegacyPollution(300_000),
+            Pollution.fromLegacyPollution(500_000),
+            LEAVES_COLOR);
     }
 
     public int colorLiquid(int oColor, int x, int z) {
-        return color(oColor, getPollution(x, z), 0.6D, 1.0D, LIQUID_COLOR);
+        return color(
+            oColor,
+            getPollution(x, z),
+            Pollution.fromLegacyPollution(300_000),
+            Pollution.fromLegacyPollution(500_000),
+            LIQUID_COLOR);
     }
 
     public int colorFoliage(int oColor, int x, int z) {
-        return color(oColor, getPollution(x, z), 0.6D, 1.0D, FOLIAGE_COLOR);
+        return color(
+            oColor,
+            getPollution(x, z),
+            Pollution.fromLegacyPollution(300_000),
+            Pollution.fromLegacyPollution(500_000),
+            FOLIAGE_COLOR);
     }
 
     @SubscribeEvent(priority = EventPriority.LOW)
@@ -143,7 +163,15 @@ public class PollutionRenderer {
             float step = (float) ((event.renderTickTime - lastUpdate) / 50);
             lastUpdate = event.renderTickTime;
 
-            float fogIntensity = (float) ((playerPollution - FOG_START_AT_POLLUTION) / (float) FOG_MAX_AT_POLLUTION);
+            double fogStart =
+                Pollution.fromLegacyPollution(FOG_START_AT_POLLUTION);
+
+            double fogRange =
+                Pollution.fromLegacyPollution(FOG_MAX_AT_POLLUTION);
+
+            float fogIntensity =
+                (float) ((playerPollution - fogStart) / fogRange);
+
             if (fogIntensity > 1) fogIntensity = 1;
             else if (fogIntensity < 0) fogIntensity = 0;
 
@@ -175,18 +203,26 @@ public class PollutionRenderer {
         if (player == null || (player.capabilities.isCreativeMode && !DEBUG)) return;
 
         World w = player.worldObj;
-        playerPollution = Pollution.getPollution(
+        playerPollution = Pollution.getLegacyPollution(
             w,
             MathHelper.floor_double(player.posX),
             MathHelper.floor_double(player.posY),
             MathHelper.floor_double(player.posZ));
 
-        Pollution.mPlayerPollution = Pollution.getPollution(
+        Pollution.mPlayerPollution = Pollution.getLegacyPollution(
             player.worldObj,
             MathHelper.floor_double(player.posX) >> 4,
             MathHelper.floor_double(player.posZ) >> 4);
 
-        float intensity = (float) ((playerPollution - PARTICLES_POLLUTION_START) / PARTICLES_POLLUTION_END);
+        double particleStart =
+            Pollution.fromLegacyPollution(PARTICLES_POLLUTION_START);
+
+        double particleRange =
+            Pollution.fromLegacyPollution(PARTICLES_POLLUTION_END);
+
+        float intensity =
+            (float) ((playerPollution - particleStart) / particleRange);
+
         if (intensity < 0) return;
         else if (intensity > 1) intensity = 1;
         else intensity *= intensity;
@@ -218,7 +254,7 @@ public class PollutionRenderer {
         Minecraft mc = Minecraft.getMinecraft();
         if (mc.theWorld == null || mc.thePlayer == null) return 0.0D;
 
-        return Pollution.getPollution(mc.theWorld, x, MathHelper.floor_double(mc.thePlayer.posY), z);
+        return Pollution.getLegacyPollution(mc.theWorld, x, MathHelper.floor_double(mc.thePlayer.posY), z);
     }
 
     private void drawPollution(String text, int off) {
@@ -231,11 +267,11 @@ public class PollutionRenderer {
     }
 
     @Deprecated
-    public int getKnownPollution(int x, int z) {
+    public int getKnownLegacyPollution(int x, int z) {
         Minecraft mc = Minecraft.getMinecraft();
         if (mc.theWorld == null) return 0;
 
-        return Pollution.getPollution(mc.theWorld, x >> 4, z >> 4);
+        return Pollution.getLegacyPollution(mc.theWorld, x >> 4, z >> 4);
     }
 
     @Deprecated

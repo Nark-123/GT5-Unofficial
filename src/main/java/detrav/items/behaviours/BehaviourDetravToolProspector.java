@@ -385,6 +385,6 @@ public class BehaviourDetravToolProspector extends BehaviourNone {
     }
 
     public static int getPollution(World aWorld, int aX, int aZ) {
-        return Pollution.getPollution(aWorld.getChunkFromBlockCoords(aX, aZ));
+        return Pollution.getLegacyPollution(aWorld.getChunkFromBlockCoords(aX, aZ));
     }
 }

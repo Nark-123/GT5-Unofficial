@@ -244,7 +244,7 @@ public class MTEPollutionCreator extends MTETieredMachineBlock {
     }
 
     public int getCurrentChunkPollution(IGregTechTileEntity aBaseMetaTileEntity) {
-        return Pollution.getPollution(aBaseMetaTileEntity);
+        return Pollution.getLegacyPollution(aBaseMetaTileEntity);
     }
 
     @Override

@@ -6,13 +6,13 @@ public interface PropagationManager {
 
     void registerSource(PropagationSource source);
 
-    void unregisterSource(PropagationSource source);
-
     void registerInfluencer(PropagationInfluencer influencer);
 
     void unregisterInfluencer(PropagationInfluencer influencer);
 
     float sample(BlockPos pos);
+
+    float sampleReference(BlockPos pos);
 
     void tick();
 }

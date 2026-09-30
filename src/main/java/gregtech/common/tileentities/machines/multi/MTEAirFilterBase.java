@@ -456,7 +456,7 @@ public abstract class MTEAirFilterBase extends MTEEnhancedMultiBlockBase<MTEAirF
             .getZCoord();
         final int chunkX = xCoordMulti - 16 * (size / 2 - chunkIndexIn % size) >> 4;
         final int chunkZ = zCoordMulti + 16 * (size / 2 - chunkIndexIn / size) >> 4;
-        return Pollution.getPollution(world, chunkX, chunkZ);
+        return Pollution.getLegacyPollution(world, chunkX, chunkZ);
     }
 
     protected final void removePollutionFromChunk(int amount, World world, int chunkIndexIn) {

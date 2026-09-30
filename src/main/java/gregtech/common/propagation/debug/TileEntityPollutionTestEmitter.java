@@ -15,7 +15,7 @@ public class TileEntityPollutionTestEmitter extends TileEntity {
     private static final int MIN_EMISSION = 100;
     private static final int MAX_EMISSION = 100_000;
 
-    private final Source source = new Source();
+    private Source source;
 
     private boolean registered;
     private int emissionPerSecond;
@@ -31,8 +31,11 @@ public class TileEntityPollutionTestEmitter extends TileEntity {
         }
 
         if (!registered) {
+            source = new Source();
+
             Pollution.getPropagationManager(worldObj)
                 .registerSource(source);
+
             registered = true;
         }
 
@@ -40,7 +43,7 @@ public class TileEntityPollutionTestEmitter extends TileEntity {
 
         PollutionManager manager = Pollution.getPropagationManager(worldObj);
 
-        lastSample = Pollution.getPollution(worldObj, xCoord, yCoord, zCoord);
+        lastSample = Pollution.getLegacyPollution(worldObj, xCoord, yCoord, zCoord);
 
         if (worldObj.getTotalWorldTime() % 20L == 0L) {
             BlockPos pos = new BlockPos(xCoord, yCoord, zCoord);
@@ -50,21 +53,22 @@ public class TileEntityPollutionTestEmitter extends TileEntity {
 
     @Override
     public void invalidate() {
-        unregisterSource();
+        retireSource();
         super.invalidate();
     }
 
     @Override
     public void onChunkUnload() {
-        unregisterSource();
+        retireSource();
         super.onChunkUnload();
     }
 
-    private void unregisterSource() {
-        if (!registered || worldObj == null || worldObj.isRemote) return;
+    private void retireSource() {
+        if (source != null) {
+            source.retire();
+            source = null;
+        }
 
-        Pollution.getPropagationManager(worldObj)
-            .unregisterSource(source);
         registered = false;
     }
 
@@ -93,6 +97,11 @@ public class TileEntityPollutionTestEmitter extends TileEntity {
     private final class Source implements PropagationSource {
 
         private double emission;
+        private boolean valid = true;
+
+        private void retire() {
+            valid = false;
+        }
 
         private void addEmission(double amount) {
             emission += amount;
@@ -110,7 +119,9 @@ public class TileEntityPollutionTestEmitter extends TileEntity {
 
         @Override
         public boolean isValid() {
-            return !TileEntityPollutionTestEmitter.this.isInvalid() && worldObj != null
+            return valid
+                && !TileEntityPollutionTestEmitter.this.isInvalid()
+                && worldObj != null
                 && worldObj.getTileEntity(xCoord, yCoord, zCoord) == TileEntityPollutionTestEmitter.this;
         }
 

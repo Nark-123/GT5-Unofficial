@@ -1,14 +1,17 @@
 package gregtech.common.propagation;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 
 import net.minecraft.util.Vec3;
 
 import it.unimi.dsi.fastutil.longs.Long2DoubleOpenHashMap;
 
-public class PollutionEmitter {
+public class PollutionEmitter implements PropagationEmitter {
 
     // Approximately 24-hour half-life at one decay step per second.
     private static final double DEFAULT_SMOOTHING = 0.99999198;
@@ -17,7 +20,7 @@ public class PollutionEmitter {
     // 16x16x16 cell coordinates, not block coordinates.
     private final Vec3 cellPosition;
     private final Vec3 center;
-    private final List<PropagationSource> sources = new ArrayList<>();
+    private final Set<PropagationSource> sources = Collections.newSetFromMap(new IdentityHashMap<>());
     private final double smoothing;
     private double pollution;
     private final List<InfluenceVector> influencers = new ArrayList<>();
@@ -60,49 +63,19 @@ public class PollutionEmitter {
 
     public void addSource(PropagationSource source) {
         if (source == null) {
-            throw new IllegalArgumentException("source cannot be null");
+            throw new IllegalArgumentException("Source is null");
         }
 
         if (source.getDimension() != dimension) {
-            throw new IllegalArgumentException("Source belongs to another dimension");
+            throw new IllegalArgumentException(
+                "Source dimension mismatch: " + source.getDimension() + " != " + dimension);
         }
 
-        Vec3 sourceCell = getCellPosition(source.getPosition());
-
-        if (sourceCell.xCoord != cellPosition.xCoord || sourceCell.yCoord != cellPosition.yCoord
-            || sourceCell.zCoord != cellPosition.zCoord) {
-
-            throw new IllegalArgumentException("Source belongs to another pollution cell");
-        }
-
-        if (!sources.contains(source)) {
-            sources.add(source);
-        }
-    }
-
-    public boolean removeSource(PropagationSource source) {
-        if (!sources.remove(source)) {
-            return false;
-        }
-
-        double emission = source.consumeEmission();
-
-        if (!Double.isFinite(emission)) {
-            throw new IllegalStateException("Invalid source emission: " + emission);
-        }
-
-        if (emission == 0.0D) {
-            return false;
-        }
-
-        double oldPollution = pollution;
-        setPollution(pollution + emission);
-
-        return pollution != oldPollution;
+        sources.add(source);
     }
 
     // Scheduled approximately once every 20 ticks per emitter.
-    public boolean update() {
+    public void update() {
         double incomingPollution = 0.0D;
 
         Iterator<PropagationSource> iterator = sources.iterator();
@@ -126,18 +99,13 @@ public class PollutionEmitter {
             if (!source.isValid()) iterator.remove();
         }
 
-        double oldPollution = pollution;
-
         if (incomingPollution != 0.0D) {
             setPollution(pollution + incomingPollution);
         }
 
-        boolean changed = pollution != oldPollution;
         pollution *= smoothing;
 
         if (pollution < 1.0E-2D) pollution = 0.0D;
-
-        return changed;
     }
 
     private static double fastExpNeg(double x) {
@@ -205,17 +173,7 @@ public class PollutionEmitter {
     }
 
     public boolean isValid() {
-        if (pollution > 0.0D) {
-            return true;
-        }
-
-        for (PropagationSource source : sources) {
-            if (source.isValid()) {
-                return true;
-            }
-        }
-
-        return false;
+        return !isEmpty();
     }
 
     public void addInfluencer(PropagationInfluencer influencer) {
@@ -291,36 +249,6 @@ public class PollutionEmitter {
         return (int) cell;
     }
 
-    public boolean flushPendingEmissions() {
-        double incomingPollution = 0.0D;
-        Iterator<PropagationSource> iterator = sources.iterator();
-
-        while (iterator.hasNext()) {
-            PropagationSource source = iterator.next();
-            double emission = source.consumeEmission();
-
-            if (!Double.isFinite(emission)) {
-                throw new IllegalStateException("Invalid source emission: " + emission);
-            }
-
-            if (emission != 0.0D) {
-                incomingPollution += emission;
-
-                if (!Double.isFinite(incomingPollution)) {
-                    throw new IllegalStateException("Pollution overflow");
-                }
-            }
-
-            if (!source.isValid()) iterator.remove();
-        }
-
-        if (incomingPollution == 0.0D) return false;
-
-        double oldPollution = pollution;
-        setPollution(pollution + incomingPollution);
-        return pollution != oldPollution;
-    }
-
     public void setRangeMultiplier(double multiplier) {
         if (!Double.isFinite(multiplier) || multiplier <= 0.0D) {
             throw new IllegalArgumentException("Invalid range multiplier: " + multiplier);
@@ -352,10 +280,16 @@ public class PollutionEmitter {
         pollutionChanged = true;
     }
 
-    boolean consumePollutionChanged() {
+    @Override
+    public boolean consumeStateChanged() {
         boolean changed = pollutionChanged;
         pollutionChanged = false;
         return changed;
+    }
+
+    @Override
+    public boolean acceptsInfluencer(PropagationInfluencer influencer) {
+        return true;
     }
 
     public Vec3 getPosition() {

@@ -61,6 +61,18 @@ public class PollutionSource implements PropagationSource {
     }
 
     public void addPollution(double amount) {
-        this.emission += amount;
+        if (!Double.isFinite(amount)) {
+            throw new IllegalArgumentException(
+                "Invalid pollution emission: " + amount);
+        }
+
+        double newEmission = emission + amount;
+
+        if (!Double.isFinite(newEmission)) {
+            throw new IllegalStateException(
+                "Pollution source emission overflow");
+        }
+
+        emission = newEmission;
     }
 }

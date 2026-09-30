@@ -134,7 +134,7 @@ public class BehaviourDetravToolElectricProspector extends BehaviourDetravToolPr
                             packet.addFluid(c.xPosition, c.zPosition, fluid);
                         }
                         case DetravMetaGeneratedTool01.MODE_POLLUTION -> {
-                            int pollution = Pollution.getPollution(c);
+                            int pollution = Pollution.getLegacyPollution(c);
 
                             packet.addPollution(c.xPosition, c.zPosition, pollution);
                         }

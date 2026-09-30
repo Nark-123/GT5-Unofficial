@@ -39,12 +39,6 @@ A persistent source intended for machines and other continuous pollution produce
 
 The current muffler integration uses this path instead of directly modifying chunk pollution.
 
-### `PollutionBurstSource`
-
-A one-shot source used for instant pollution additions and compatibility with existing APIs or legacy data.
-
-After its emission is consumed, the source becomes invalid.
-
 ---
 
 ## PollutionEmitter
