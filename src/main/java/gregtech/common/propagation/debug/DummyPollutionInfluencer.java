@@ -30,8 +30,7 @@ public class DummyPollutionInfluencer implements PropagationInfluencer {
         int n = (int) y;
         double f = y - n;
 
-        double p = ((-0.03951000D * f + 0.23059332D) * f - 0.69107581D) * f
-            + 0.99989849D;
+        double p = ((-0.03951000D * f + 0.23059332D) * f - 0.69107581D) * f + 0.99989849D;
 
         long scaleBits = (long) (1023 - n) << 52;
         double scale = Double.longBitsToDouble(scaleBits);
@@ -41,17 +40,19 @@ public class DummyPollutionInfluencer implements PropagationInfluencer {
 
     @Override
     public double influence(Vec3 pos, InfluenceVector influenceVector) {
-        if (influenceVector.distance == 0.0D) return 1.0D;
-
-        double dx = influenceVector.normalizedVec.xCoord;
-        double dy = influenceVector.normalizedVec.yCoord;
-        double dz = influenceVector.normalizedVec.zCoord;
-
         double rx = pos.xCoord - position.xCoord;
         double ry = pos.yCoord - position.yCoord;
         double rz = pos.zCoord - position.zCoord;
 
         double r2 = rx * rx + ry * ry + rz * rz;
+
+        if (r2 > RANGE * RANGE) {
+            return 1.0D;
+        }
+
+        double dx = influenceVector.normalizedVec.xCoord;
+        double dy = influenceVector.normalizedVec.yCoord;
+        double dz = influenceVector.normalizedVec.zCoord;
 
         double s = rx * dx + ry * dy + rz * dz;
         double rho2 = Math.max(0.0D, r2 - s * s);
@@ -66,7 +67,7 @@ public class DummyPollutionInfluencer implements PropagationInfluencer {
         double wake = fastExpNeg(-(-(s * s) / (l * l) - rho2 / (2.0D * sigma2)));
 
         double combined = core + wake - core * wake;
-        return 1.0D - ETA_MAX * combined;
+        return Math.max(0.0D, Math.min(1.0D, 1.0D - ETA_MAX * combined));
     }
 
     @Override

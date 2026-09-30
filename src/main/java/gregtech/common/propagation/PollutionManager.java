@@ -40,6 +40,7 @@ public class PollutionManager implements PropagationManager {
     private int queryProfileTicks;
 
     private static final Comparator<Vec3> CELL_COMPARATOR = new Comparator<Vec3>() {
+
         @Override
         public int compare(Vec3 a, Vec3 b) {
             int x = Double.compare(a.xCoord, b.xCoord);
@@ -73,11 +74,19 @@ public class PollutionManager implements PropagationManager {
 
     @Override
     public void registerSource(PropagationSource source) {
-        if (source.getDimension() != dimension) {
-            throw new IllegalArgumentException("Source belongs to another dimension");
+        if (source == null) {
+            throw new IllegalArgumentException("Source is null");
         }
 
-        Vec3 cellPosition = getCellPosition(source.getPosition());
+        if (source.getDimension() != dimension) {
+            throw new IllegalArgumentException(
+                "Source dimension mismatch: " + source.getDimension() + " != " + dimension);
+        }
+
+        Vec3 position = source.getPosition();
+        validatePosition(position, "source");
+
+        Vec3 cellPosition = getCellPosition(position);
         PollutionEmitter emitter = pollutionEmitters.get(cellPosition);
 
         if (emitter == null) {
@@ -104,34 +113,33 @@ public class PollutionManager implements PropagationManager {
 
     public void registerEmitter(PollutionEmitter emitter) {
         if (emitter.getDimension() != dimension) {
-            throw new IllegalArgumentException("Emitter belongs to another dimension");
+            throw new IllegalArgumentException(
+                "Emitter dimension mismatch: " + emitter.getDimension() + " != " + dimension);
         }
 
-        PollutionEmitter existing = pollutionEmitters.get(emitter.getCellPosition());
+        Vec3 cell = emitter.getCellPosition();
+        PollutionEmitter existing = pollutionEmitters.get(cell);
 
-        if (existing == emitter) return;
+        if (existing == emitter) {
+            return;
+        }
 
-        //I guess this may produce an incorrect result
         if (existing != null) {
-            unregisterEmitter(existing);
+            throw new IllegalStateException(
+                "Emitter cell already occupied: " + cell.xCoord + ", " + cell.yCoord + ", " + cell.zCoord);
         }
 
-        pollutionEmitters.put(emitter.getCellPosition(), emitter);
+        pollutionEmitters.put(cell, emitter);
         emitters.add(emitter);
         spatialIndex.add(emitter);
         updateInfluencerCandidates(emitter);
 
         if (trackRemovals) {
-            Vec3 cell = emitter.getCellPosition();
             removedEmitterCells.remove(new BlockPos((int) cell.xCoord, (int) cell.yCoord, (int) cell.zCoord));
         }
     }
 
     public void unregisterEmitter(PollutionEmitter emitter) {
-        emitters.remove(emitter);
-        spatialIndex.remove(emitter);
-        dirtyEmitters.remove(emitter);
-
         Vec3 cell = emitter.getCellPosition();
 
         if (pollutionEmitters.get(cell) != emitter) {
@@ -139,6 +147,9 @@ public class PollutionManager implements PropagationManager {
         }
 
         pollutionEmitters.remove(cell);
+        emitters.remove(emitter);
+        spatialIndex.remove(emitter);
+        dirtyEmitters.remove(emitter);
 
         if (trackRemovals) {
             removedEmitterCells.add(new BlockPos((int) cell.xCoord, (int) cell.yCoord, (int) cell.zCoord));
@@ -167,14 +178,35 @@ public class PollutionManager implements PropagationManager {
 
     @Override
     public void registerInfluencer(PropagationInfluencer influencer) {
-        if (influencers.contains(influencer)) return;
+        if (influencer == null) {
+            throw new IllegalArgumentException("Influencer is null");
+        }
 
-        influencers.add(influencer);
+        Vec3 position = influencer.getPosition();
+        validatePosition(position, "influencer");
+
+        double range = influencer.getRange();
+
+        if (!Double.isFinite(range) || range < 0.0D) {
+            throw new IllegalArgumentException("Invalid influencer range: " + range);
+        }
+
+        if (influencers.contains(influencer)) {
+            return;
+        }
+
+        double coverageRange = influencerSpatialIndex.getCoverageRange(influencer);
+
+        if (!Double.isFinite(coverageRange)) {
+            throw new IllegalArgumentException("Influencer coverage overflow");
+        }
+
+        Set<PollutionEmitter> candidates = spatialIndex.get(position, coverageRange);
+
         influencerSpatialIndex.add(influencer);
+        influencers.add(influencer);
 
-        double range = influencerSpatialIndex.getCoverageRange(influencer);
-
-        for (PollutionEmitter emitter : spatialIndex.get(influencer.getPosition(), range)) {
+        for (PollutionEmitter emitter : candidates) {
             emitter.addInfluencer(influencer);
         }
     }
@@ -194,31 +226,36 @@ public class PollutionManager implements PropagationManager {
 
     @Override
     public float sample(BlockPos pos) {
-        if (!queryProfilingEnabled) {
-            Vec3 vec = Vec3.createVectorHelper(pos.x, pos.y, pos.z);
-            double result = 0.0D;
-
-            for (PollutionEmitter emitter : spatialIndex.get(vec)) {
-                result += emitter.getInfluence(vec);
-            }
-
-            return (float) result;
-        }
-
-        long start = System.nanoTime();
+        PollutionQueryProfiler profiler = queryProfilingEnabled ? queryProfiler : null;
+        long start = profiler != null ? System.nanoTime() : 0L;
 
         Vec3 vec = Vec3.createVectorHelper(pos.x, pos.y, pos.z);
         List<PollutionEmitter> candidates = spatialIndex.get(vec);
 
-        queryProfiler.beginQuery(candidates.size());
+        if (profiler != null) {
+            profiler.beginQuery(candidates.size());
+        }
 
         double result = 0.0D;
 
         for (PollutionEmitter emitter : candidates) {
-            result += emitter.getInfluenceProfiled(vec, queryProfiler);
+            result += emitter.getInfluence(vec, profiler);
         }
 
-        queryProfiler.endQuery(System.nanoTime() - start);
+        if (profiler != null) {
+            profiler.endQuery(System.nanoTime() - start);
+        }
+
+        return (float) result;
+    }
+
+    public float sampleReference(BlockPos pos) {
+        Vec3 vec = Vec3.createVectorHelper(pos.x, pos.y, pos.z);
+        double result = 0.0D;
+
+        for (PollutionEmitter emitter : emitters) {
+            result += emitter.getInfluence(vec);
+        }
 
         return (float) result;
     }
@@ -399,6 +436,19 @@ public class PollutionManager implements PropagationManager {
     }
 
     public void applyEmitterSnapshot(int[] cellX, int[] cellY, int[] cellZ, double[] pollution) {
+        if (cellX.length != pollution.length
+            || cellY.length != pollution.length
+            || cellZ.length != pollution.length) {
+
+            throw new IllegalArgumentException("Emitter snapshot length mismatch");
+        }
+
+        for (double value : pollution) {
+            if (!Double.isFinite(value)) {
+                throw new IllegalArgumentException("Invalid emitter pollution: " + value);
+            }
+        }
+
         Set<Vec3> received = new TreeSet<>(CELL_COMPARATOR);
 
         for (int i = 0; i < pollution.length; i++) {
@@ -411,11 +461,12 @@ public class PollutionManager implements PropagationManager {
 
             if (emitter == null) {
                 emitter = new PollutionEmitter(dimension, cell, 256);
-                pollutionEmitters.put(cell, emitter);
+                emitter.setPollution(pollution[i]);
                 registerEmitter(emitter);
+            } else {
+                emitter.setPollution(pollution[i]);
             }
 
-            emitter.setPollution(pollution[i]);
             dirtyEmitters.remove(emitter);
         }
 
@@ -433,40 +484,80 @@ public class PollutionManager implements PropagationManager {
     }
 
     public void setEmitterPollution(int cellX, int cellY, int cellZ, double pollution) {
+        if (!Double.isFinite(pollution)) {
+            throw new IllegalArgumentException("Invalid emitter pollution: " + pollution);
+        }
+
         Vec3 cellPosition = Vec3.createVectorHelper(cellX, cellY, cellZ);
         PollutionEmitter emitter = pollutionEmitters.get(cellPosition);
 
         if (pollution <= 0.0D) {
-            if (emitter != null) unregisterEmitter(emitter);
+            if (emitter != null) {
+                unregisterEmitter(emitter);
+            }
+
             return;
         }
 
         if (emitter == null) {
             emitter = new PollutionEmitter(dimension, cellPosition, 256);
+            emitter.setPollution(pollution);
             registerEmitter(emitter);
+        } else {
+            emitter.setPollution(pollution);
         }
 
-        emitter.setPollution(pollution);
         dirtyEmitters.remove(emitter);
     }
 
     public void addPollution(int x, int y, int z, double pollution) {
+        if (!Double.isFinite(pollution)) {
+            throw new IllegalArgumentException("Invalid pollution: " + pollution);
+        }
+
         Vec3 cell = getCellPosition(Vec3.createVectorHelper(x, y, z));
         PollutionEmitter emitter = pollutionEmitters.get(cell);
 
         if (emitter == null) {
             emitter = new PollutionEmitter(dimension, cell, 256);
+            emitter.setPollution(pollution);
             registerEmitter(emitter);
+        } else {
+            double newPollution = emitter.getPollution() + pollution;
+
+            if (!Double.isFinite(newPollution)) {
+                throw new IllegalArgumentException("Pollution overflow");
+            }
+
+            emitter.setPollution(newPollution);
         }
 
-        emitter.setPollution(Math.max(0.0D, emitter.getPollution() + pollution));
         dirtyEmitters.add(emitter);
+    }
+
+    private static void validatePosition(Vec3 position, String type) {
+        if (position == null || !Double.isFinite(position.xCoord)
+            || !Double.isFinite(position.yCoord)
+            || !Double.isFinite(position.zCoord)) {
+
+            throw new IllegalArgumentException("Invalid " + type + " position");
+        }
     }
 
     private Vec3 getCellPosition(Vec3 position) {
         return Vec3.createVectorHelper(
-            ((int) Math.floor(position.xCoord)) >> 4,
-            ((int) Math.floor(position.yCoord)) >> 4,
-            ((int) Math.floor(position.zCoord)) >> 4);
+            getCellCoordinate(position.xCoord),
+            getCellCoordinate(position.yCoord),
+            getCellCoordinate(position.zCoord));
+    }
+
+    private int getCellCoordinate(double coordinate) {
+        double cell = Math.floor(coordinate / 16.0D);
+
+        if (cell < Integer.MIN_VALUE || cell > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException("Cell coordinate out of range: " + coordinate);
+        }
+
+        return (int) cell;
     }
 }

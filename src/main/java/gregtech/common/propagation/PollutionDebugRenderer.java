@@ -3,10 +3,13 @@ package gregtech.common.propagation;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityClientPlayerMP;
 import net.minecraft.util.MathHelper;
+
 import net.minecraftforge.client.event.RenderGameOverlayEvent;
 
+import com.gtnewhorizon.gtnhlib.blockpos.BlockPos;
+
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
-import gregtech.common.pollution.Pollution;
+import gregtech.GTMod;
 
 public class PollutionDebugRenderer {
 
@@ -14,6 +17,9 @@ public class PollutionDebugRenderer {
 
     private int updateTimer;
     private double cachedPollution;
+    private double cachedReference;
+    private double cachedDifference;
+    private boolean sampleMismatch;
 
     @SubscribeEvent
     public void render(RenderGameOverlayEvent.Text event) {
@@ -23,19 +29,31 @@ public class PollutionDebugRenderer {
             return;
         }
 
+        int dimension = player.worldObj.provider.dimensionId;
+
         if (++updateTimer >= 20) {
             updateTimer = 0;
 
-            cachedPollution = Pollution.getPollution(
-                player.worldObj,
+            BlockPos pos = new BlockPos(
                 MathHelper.floor_double(player.posX),
                 MathHelper.floor_double(player.posY),
                 MathHelper.floor_double(player.posZ));
+
+            PollutionManager manager = GTMod.clientProxy()
+                .getClientPollutionManager(dimension);
+
+            cachedPollution = manager.sample(pos);
+            cachedReference = manager.sampleReference(pos);
+            cachedDifference = Math.abs(cachedPollution - cachedReference);
+
+            double tolerance = Math.max(1.0E-6D, Math.abs(cachedReference) * 1.0E-6D);
+            sampleMismatch = cachedDifference > tolerance;
         }
 
-        int dimension = player.worldObj.provider.dimensionId;
-
         event.left.add(String.format("Pollution: %.2f", cachedPollution));
+        event.left.add(String.format("Reference: %.2f", cachedReference));
+        event.left.add(String.format("Difference: %.6f", cachedDifference));
+        event.left.add("Reference check: " + (sampleMismatch ? "MISMATCH" : "OK"));
         event.left.add(String.format("Pos: %.1f %.1f %.1f", player.posX, player.posY, player.posZ));
 
         PollutionQueryProfileClientState.Data profile = PollutionQueryProfileClientState.get(dimension);

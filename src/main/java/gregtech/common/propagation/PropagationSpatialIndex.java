@@ -35,6 +35,10 @@ public class PropagationSpatialIndex {
     private final Map<Vec3, List<PollutionEmitter>> batches = new TreeMap<>(BATCH_COMPARATOR);
 
     public void add(PollutionEmitter emitter) {
+        if (emitterBounds.containsKey(emitter)) {
+            return;
+        }
+
         PropagationBatchBounds bounds = getRequiredBounds(emitter);
 
         for (int x = bounds.minX; x <= bounds.maxX; x++) {
@@ -168,7 +172,17 @@ public class PropagationSpatialIndex {
     }
 
     private int getBatchCoordinate(double coordinate) {
-        return (int) Math.floor(coordinate / BATCH_SIZE);
+        if (!Double.isFinite(coordinate)) {
+            throw new IllegalArgumentException("Invalid batch coordinate: " + coordinate);
+        }
+
+        double batch = Math.floor(coordinate / BATCH_SIZE);
+
+        if (batch < Integer.MIN_VALUE || batch > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException("Batch coordinate out of range: " + coordinate);
+        }
+
+        return (int) batch;
     }
 
     private static final class BatchBounds {

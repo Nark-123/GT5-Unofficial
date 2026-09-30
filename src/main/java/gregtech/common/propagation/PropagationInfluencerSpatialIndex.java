@@ -120,6 +120,16 @@ public class PropagationInfluencerSpatialIndex {
     }
 
     private int getBatchCoordinate(double coordinate) {
-        return (int) Math.floor(coordinate / BATCH_SIZE);
+        if (!Double.isFinite(coordinate)) {
+            throw new IllegalArgumentException("Invalid batch coordinate: " + coordinate);
+        }
+
+        double batch = Math.floor(coordinate / BATCH_SIZE);
+
+        if (batch < Integer.MIN_VALUE || batch > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException("Batch coordinate out of range: " + coordinate);
+        }
+
+        return (int) batch;
     }
 }

@@ -74,11 +74,6 @@ public class Pollution {
         this.world = world;
         this.propagationManager = new PollutionManager(world.provider.dimensionId);
 
-        if (!world.isRemote) {
-            PollutionSavedData.get(world)
-                .loadInto(propagationManager);
-        }
-
         if (EVENT_HANDLER == null) {
             EVENT_HANDLER = new GT_PollutionEventHandler();
             MinecraftForge.EVENT_BUS.register(EVENT_HANDLER);

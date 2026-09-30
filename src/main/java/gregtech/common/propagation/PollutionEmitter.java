@@ -40,6 +40,14 @@ public class PollutionEmitter {
     }
 
     public PollutionEmitter(int dimension, Vec3 cellPosition, double propagationRange, double smoothing) {
+        if (!Double.isFinite(propagationRange) || propagationRange <= 0.0D) {
+            throw new IllegalArgumentException("Invalid propagation range: " + propagationRange);
+        }
+
+        if (!Double.isFinite(smoothing) || smoothing < 0.0D || smoothing > 1.0D) {
+            throw new IllegalArgumentException("Invalid smoothing: " + smoothing);
+        }
+
         this.dimension = dimension;
         this.cellPosition = cellPosition;
         this.smoothing = smoothing;
@@ -78,12 +86,17 @@ public class PollutionEmitter {
         }
 
         double emission = source.consumeEmission();
+
+        if (!Double.isFinite(emission)) {
+            throw new IllegalStateException("Invalid source emission: " + emission);
+        }
+
         if (emission == 0.0D) {
             return false;
         }
 
         double oldPollution = pollution;
-        pollution = Math.max(0.0D, pollution + emission);
+        setPollution(pollution + emission);
 
         return pollution != oldPollution;
     }
@@ -98,14 +111,25 @@ public class PollutionEmitter {
             PropagationSource source = iterator.next();
             double emission = source.consumeEmission();
 
-            if (emission != 0.0D) incomingPollution += emission;
+            if (!Double.isFinite(emission)) {
+                throw new IllegalStateException("Invalid source emission: " + emission);
+            }
+
+            if (emission != 0.0D) {
+                incomingPollution += emission;
+
+                if (!Double.isFinite(incomingPollution)) {
+                    throw new IllegalStateException("Pollution overflow");
+                }
+            }
+
             if (!source.isValid()) iterator.remove();
         }
 
         double oldPollution = pollution;
 
         if (incomingPollution != 0.0D) {
-            pollution = Math.max(0.0D, pollution + incomingPollution);
+            setPollution(pollution + incomingPollution);
         }
 
         boolean changed = pollution != oldPollution;
@@ -122,8 +146,7 @@ public class PollutionEmitter {
         int n = (int) y;
         double f = y - n;
 
-        double p = ((-0.03951000D * f + 0.23059332D) * f - 0.69107581D) * f
-            + 0.99989849D;
+        double p = ((-0.03951000D * f + 0.23059332D) * f - 0.69107581D) * f + 0.99989849D;
 
         long scaleBits = (long) (1023 - n) << 52;
         double scale = Double.longBitsToDouble(scaleBits);
@@ -131,33 +154,11 @@ public class PollutionEmitter {
         return scale * p;
     }
 
-    public double getInfluenceProfiled(Vec3 pos, PollutionQueryProfiler profiler) {
-        if (pollution <= 0.0D) return 0.0D;
-
-        double dx = center.xCoord - pos.xCoord;
-        double dy = center.yCoord - pos.yCoord;
-        double dz = center.zCoord - pos.zCoord;
-
-        double distanceSquared = (dx * dx) + (dy * dy) + (dz * dz);
-
-        if (distanceSquared > effectiveRangeSquared) return 0.0D;
-
-        profiler.emitterInsideRange(influencers.size());
-
-        double influence = pollution / gaussianNormalization * fastExpNeg(4.5D * distanceSquared * inverseRangeSquared);
-
-        if (influencers.isEmpty()) return influence;
-
-        for (InfluenceVector vector : influencers) {
-            double multiplier = vector.source.influence(pos, vector);
-            profiler.influencerCall(multiplier);
-            influence *= multiplier;
-        }
-
-        return influence;
+    public double getInfluence(Vec3 pos) {
+        return getInfluence(pos, null);
     }
 
-    public double getInfluence(Vec3 pos) {
+    public double getInfluence(Vec3 pos, PollutionQueryProfiler profiler) {
         if (pollution <= 0.0D) {
             return 0.0D;
         }
@@ -172,14 +173,32 @@ public class PollutionEmitter {
             return 0.0D;
         }
 
-        double influence = pollution / gaussianNormalization * Math.exp(-4.5D * distanceSquared * inverseRangeSquared);
+        if (profiler != null) {
+            profiler.emitterInsideRange(influencers.size());
+        }
 
-        if (influencers.isEmpty()) {
-            return influence;
+        double influence = pollution / gaussianNormalization * fastExpNeg(4.5D * distanceSquared * inverseRangeSquared);
+
+        if (!Double.isFinite(influence)) {
+            throw new IllegalStateException("Invalid pollution influence: " + influence);
         }
 
         for (InfluenceVector vector : influencers) {
-            influence *= vector.source.influence(pos, vector);
+            double multiplier = vector.source.influence(pos, vector);
+
+            if (!Double.isFinite(multiplier) || multiplier < 0.0D) {
+                throw new IllegalStateException("Invalid influencer multiplier: " + multiplier);
+            }
+
+            if (profiler != null) {
+                profiler.influencerCall(multiplier);
+            }
+
+            influence *= multiplier;
+
+            if (!Double.isFinite(influence)) {
+                throw new IllegalStateException("Pollution influence overflow");
+            }
         }
 
         return influence;
@@ -238,7 +257,15 @@ public class PollutionEmitter {
     }
 
     private void setPropagationRange(double range) {
+        if (!Double.isFinite(range) || range <= 0.0D) {
+            throw new IllegalArgumentException("Invalid propagation range: " + range);
+        }
+
         range = Math.max(basePropagationRange, range);
+
+        if (!Double.isFinite(range * rangeMultiplier)) {
+            throw new IllegalArgumentException("Effective range overflow");
+        }
 
         if (propagationRange == range) return;
 
@@ -249,9 +276,19 @@ public class PollutionEmitter {
 
     private Vec3 getCellPosition(Vec3 position) {
         return Vec3.createVectorHelper(
-            ((int) Math.floor(position.xCoord)) >> 4,
-            ((int) Math.floor(position.yCoord)) >> 4,
-            ((int) Math.floor(position.zCoord)) >> 4);
+            getCellCoordinate(position.xCoord),
+            getCellCoordinate(position.yCoord),
+            getCellCoordinate(position.zCoord));
+    }
+
+    private int getCellCoordinate(double coordinate) {
+        double cell = Math.floor(coordinate / 16.0D);
+
+        if (cell < Integer.MIN_VALUE || cell > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException("Cell coordinate out of range: " + coordinate);
+        }
+
+        return (int) cell;
     }
 
     public boolean flushPendingEmissions() {
@@ -262,20 +299,35 @@ public class PollutionEmitter {
             PropagationSource source = iterator.next();
             double emission = source.consumeEmission();
 
-            if (emission != 0.0D) incomingPollution += emission;
+            if (!Double.isFinite(emission)) {
+                throw new IllegalStateException("Invalid source emission: " + emission);
+            }
+
+            if (emission != 0.0D) {
+                incomingPollution += emission;
+
+                if (!Double.isFinite(incomingPollution)) {
+                    throw new IllegalStateException("Pollution overflow");
+                }
+            }
+
             if (!source.isValid()) iterator.remove();
         }
 
         if (incomingPollution == 0.0D) return false;
 
         double oldPollution = pollution;
-        pollution = Math.max(0.0D, pollution + incomingPollution);
+        setPollution(pollution + incomingPollution);
         return pollution != oldPollution;
     }
 
     public void setRangeMultiplier(double multiplier) {
-        if (multiplier <= 0.0D) {
-            throw new IllegalArgumentException("Range multiplier must be > 0");
+        if (!Double.isFinite(multiplier) || multiplier <= 0.0D) {
+            throw new IllegalArgumentException("Invalid range multiplier: " + multiplier);
+        }
+
+        if (!Double.isFinite(propagationRange * multiplier)) {
+            throw new IllegalArgumentException("Effective range overflow");
         }
 
         if (rangeMultiplier == multiplier) return;
@@ -286,6 +338,10 @@ public class PollutionEmitter {
     }
 
     public void setPollution(double pollution) {
+        if (!Double.isFinite(pollution)) {
+            throw new IllegalArgumentException("Invalid pollution: " + pollution);
+        }
+
         double newPollution = Math.max(0.0D, pollution);
 
         if (this.pollution == newPollution) {

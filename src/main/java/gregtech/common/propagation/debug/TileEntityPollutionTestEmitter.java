@@ -1,8 +1,11 @@
 package gregtech.common.propagation.debug;
 
+import gregtech.common.propagation.PollutionManager;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.Vec3;
+
+import com.gtnewhorizon.gtnhlib.blockpos.BlockPos;
 
 import gregtech.common.pollution.Pollution;
 import gregtech.common.propagation.PropagationSource;
@@ -35,7 +38,14 @@ public class TileEntityPollutionTestEmitter extends TileEntity {
 
         source.addEmission(emissionPerSecond / 20.0D);
 
+        PollutionManager manager = Pollution.getPropagationManager(worldObj);
+
         lastSample = Pollution.getPollution(worldObj, xCoord, yCoord, zCoord);
+
+        if (worldObj.getTotalWorldTime() % 20L == 0L) {
+            BlockPos pos = new BlockPos(xCoord, yCoord, zCoord);
+            float reference = manager.sampleReference(pos);
+        }
     }
 
     @Override
