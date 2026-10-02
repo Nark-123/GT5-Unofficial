@@ -123,9 +123,9 @@ import gregtech.common.pollution.Pollution;
 import gregtech.common.pollution.PollutionRenderer;
 import gregtech.common.powergoggles.PowerGogglesCommand;
 import gregtech.common.propagation.PollutionClientTickHandler;
-import gregtech.common.propagation.PollutionDebugRenderer;
-import gregtech.common.propagation.PollutionManager;
-import gregtech.common.propagation.PollutionQueryProfileClientState;
+import gregtech.common.propagation.pollution.debug.PollutionDebugRenderer;
+import gregtech.common.propagation.pollution.PollutionManager;
+import gregtech.common.propagation.debug.PollutionQueryProfileClientState;
 import gregtech.common.render.BaseMetaTileEntityRenderer;
 import gregtech.common.render.BlackholeRenderer;
 import gregtech.common.render.FlaskRenderer;
@@ -539,7 +539,9 @@ public class GTClient extends GTProxy {
     }
 
     public PollutionManager getClientPollutionManager(int dimension) {
-        return clientPollutionManagers.computeIfAbsent(dimension, id -> new PollutionManager(id, false));
+        return clientPollutionManagers.computeIfAbsent(
+            dimension,
+            PollutionManager::createReplica);
     }
 
     public void removeClientPollutionManager(int dimension) {

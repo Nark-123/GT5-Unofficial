@@ -1,0 +1,18 @@
+package gregtech.common.propagation.api;
+
+import com.gtnewhorizon.gtnhlib.blockpos.BlockPos;
+
+public interface PropagationManager {
+
+    void registerSource(PropagationSource source);
+
+    void registerInfluencer(PropagationInfluencer influencer);
+
+    void unregisterInfluencer(PropagationInfluencer influencer);
+
+    float sample(BlockPos pos);
+
+    float sampleReference(BlockPos pos);
+
+    void tick();
+}

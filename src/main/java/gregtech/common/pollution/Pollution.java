@@ -8,9 +8,15 @@ import java.io.IOException;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Map;
 
 import javax.annotation.ParametersAreNonnullByDefault;
 
+import gregtech.api.net.GTPacketPollutionState;
+import gregtech.common.propagation.runtime.EmitterRuntimeChange;
+import gregtech.common.propagation.runtime.InfluencerRuntimeChange;
 import net.minecraft.block.Block;
 import net.minecraft.block.material.Material;
 import net.minecraft.entity.EntityLivingBase;
@@ -19,6 +25,7 @@ import net.minecraft.init.Blocks;
 import net.minecraft.potion.Potion;
 import net.minecraft.potion.PotionEffect;
 import net.minecraft.tileentity.TileEntity;
+import net.minecraft.util.MathHelper;
 import net.minecraft.util.Vec3;
 import net.minecraft.world.World;
 import net.minecraft.world.chunk.Chunk;
@@ -42,10 +49,10 @@ import gregtech.api.net.GTPacketPollutionEmitter;
 import gregtech.api.net.GTPacketPollutionQueryProfile;
 import gregtech.api.util.GTChunkAssociatedData;
 import gregtech.api.util.GTUtility;
-import gregtech.common.propagation.PollutionEmitter;
-import gregtech.common.propagation.PollutionManager;
-import gregtech.common.propagation.PollutionQueryProfiler;
-import gregtech.common.propagation.PollutionSavedData;
+import gregtech.common.propagation.pollution.emitter.PollutionEmitter;
+import gregtech.common.propagation.pollution.PollutionManager;
+import gregtech.common.propagation.debug.PollutionQueryProfiler;
+import gregtech.common.propagation.pollution.persistence.PollutionSavedData;
 
 public class Pollution {
 
@@ -56,9 +63,11 @@ public class Pollution {
     // Legacy scale used by the chunk-based compatibility API.
     private static final double LEGACY_POLLUTION_SCALE = 500_000.0D;
     private final Set<EntityPlayerMP> emitterSyncedPlayers = new HashSet<>();
-    private int fullResyncCursor;
-    private int fullResyncAccumulator;
+
     private static final int QUERY_PROFILE_SYNC_INTERVAL = 10;
+
+    private static final Map<World, PollutionManager> PROPAGATION_MANAGERS =
+        Collections.synchronizedMap(new IdentityHashMap<>());
 
     @Deprecated
     public static int mPlayerPollution;
@@ -67,157 +76,227 @@ public class Pollution {
 
     public Pollution(World world) {
         this.world = world;
-        this.propagationManager = new PollutionManager(world.provider.dimensionId);
+
+        this.propagationManager = getPropagationManager(world);
 
         if (EVENT_HANDLER == null) {
             EVENT_HANDLER = new GT_PollutionEventHandler();
+
             MinecraftForge.EVENT_BUS.register(EVENT_HANDLER);
         }
 
         if (!world.isRemote) {
             propagationManager.setQueryProfilingEnabled(true);
-            PollutionSavedData.get(world)
-                .loadInto(propagationManager);
         }
     }
 
-    private void syncQueryProfile() {
-        PollutionQueryProfiler.Snapshot snapshot = propagationManager.consumeQueryProfile();
+    private void syncQueryProfile(
+        boolean includeParity) {
 
-        GTPacketPollutionQueryProfile packet = new GTPacketPollutionQueryProfile(
-            QUERY_PROFILE_SYNC_INTERVAL,
-            snapshot,
-            propagationManager.getEmitterCount(),
-            propagationManager.getInfluencerCount());
+        PollutionQueryProfiler.Snapshot snapshot =
+            propagationManager
+                .consumeQueryProfile();
 
-        for (Object obj : world.playerEntities) {
-            if (obj instanceof EntityPlayerMP) {
-                GTValues.NW.sendToPlayer(packet, (EntityPlayerMP) obj);
+        int emitterCount =
+            propagationManager
+                .getEmitterCount();
+
+        int influencerCount =
+            propagationManager
+                .getInfluencerCount();
+
+        GTPacketPollutionQueryProfile
+            profileOnlyPacket =
+            includeParity
+                ? null
+                : new GTPacketPollutionQueryProfile(
+                QUERY_PROFILE_SYNC_INTERVAL,
+                snapshot,
+                emitterCount,
+                influencerCount);
+
+        for (Object obj :
+            world.playerEntities) {
+
+            if (!(obj instanceof EntityPlayerMP)) {
+                continue;
             }
+
+            EntityPlayerMP player =
+                (EntityPlayerMP) obj;
+
+            if (!includeParity) {
+                GTValues.NW.sendToPlayer(
+                    profileOnlyPacket,
+                    player);
+
+                continue;
+            }
+
+            int x = MathHelper.floor_double(player.posX);
+
+            int y = MathHelper.floor_double(player.posY);
+
+            int z = MathHelper.floor_double(player.posZ);
+
+            BlockPos pos = new BlockPos(x, y, z);
+
+            double serverSample =
+                propagationManager
+                    .sampleUnprofiledForDebug(
+                        pos);
+
+            double serverReference =
+                propagationManager
+                    .sampleReference(
+                        pos);
+
+            GTPacketPollutionQueryProfile packet =
+                new GTPacketPollutionQueryProfile(
+                    QUERY_PROFILE_SYNC_INTERVAL,
+                    snapshot,
+                    emitterCount,
+                    influencerCount,
+                    x,
+                    y,
+                    z,
+                    serverSample,
+                    serverReference);
+
+            GTValues.NW.sendToPlayer(
+                packet,
+                player);
         }
     }
 
-    private GTPacketPollutionEmitter createPollutionSnapshotPacket() {
-        List<PollutionEmitter> emitters = propagationManager.getStandardEmitters();
+    private GTPacketPollutionState
+    createPollutionSnapshotPacket() {
 
-        int count = 0;
-
-        for (PollutionEmitter emitter : emitters) {
-            if (emitter.getPollution() > 0.0D) count++;
-        }
-
-        int[] cellX = new int[count];
-        int[] cellY = new int[count];
-        int[] cellZ = new int[count];
-        double[] pollution = new double[count];
-        int index = 0;
-
-        for (PollutionEmitter emitter : emitters) {
-            if (emitter.getPollution() <= 0.0D) continue;
-
-            Vec3 cell = emitter.getCellPosition();
-
-            cellX[index] = (int) cell.xCoord;
-            cellY[index] = (int) cell.yCoord;
-            cellZ[index] = (int) cell.zCoord;
-            pollution[index++] = emitter.getPollution();
-        }
-
-        return new GTPacketPollutionEmitter(true, cellX, cellY, cellZ, pollution);
+        return GTPacketPollutionState.full(
+            propagationManager
+                .captureEmitterFullSnapshot(),
+            propagationManager
+                .captureInfluencerFullSnapshot());
     }
 
     private void syncPlayerPollution() {
-        emitterSyncedPlayers.retainAll(world.playerEntities);
+        emitterSyncedPlayers.retainAll(
+            world.playerEntities);
 
-        List<PollutionEmitter> dirtyEmitters = propagationManager.consumeDirtyEmitters();
-        Set<BlockPos> removedCells = propagationManager.consumeRemovedEmitterCells();
+        List<EmitterRuntimeChange>
+            emitterChanges =
+            propagationManager
+                .consumeEmitterRuntimeChanges();
 
-        int updateCount = dirtyEmitters.size() + removedCells.size();
-        GTPacketPollutionEmitter updatePacket = null;
+        List<InfluencerRuntimeChange>
+            influencerChanges =
+            propagationManager
+                .consumeInfluencerRuntimeChanges();
 
-        if (updateCount > 0) {
-            int[] cellX = new int[updateCount];
-            int[] cellY = new int[updateCount];
-            int[] cellZ = new int[updateCount];
-            double[] pollution = new double[updateCount];
-            int index = 0;
+        boolean hasChanges =
+            !emitterChanges.isEmpty()
+                || !influencerChanges.isEmpty();
 
-            for (PollutionEmitter emitter : dirtyEmitters) {
-                Vec3 cell = emitter.getCellPosition();
+        GTPacketPollutionState deltaPacket =
+            hasChanges
+                ? GTPacketPollutionState.delta(
+                emitterChanges,
+                influencerChanges)
+                : null;
 
-                cellX[index] = (int) cell.xCoord;
-                cellY[index] = (int) cell.yCoord;
-                cellZ[index] = (int) cell.zCoord;
-                pollution[index++] = emitter.getPollution();
-            }
-
-            for (BlockPos cell : removedCells) {
-                cellX[index] = cell.x;
-                cellY[index] = cell.y;
-                cellZ[index] = cell.z;
-                pollution[index++] = 0.0D;
-            }
-
-            updatePacket = new GTPacketPollutionEmitter(false, cellX, cellY, cellZ, pollution);
-        }
-
-        int syncedCount = 0;
+        GTPacketPollutionState fullPacket =
+            null;
 
         for (Object obj : world.playerEntities) {
-            if (obj instanceof EntityPlayerMP && emitterSyncedPlayers.contains(obj)) {
-                syncedCount++;
+            if (!(obj instanceof EntityPlayerMP)) {
+                continue;
             }
-        }
 
-        int fullResyncCount = 0;
+            EntityPlayerMP player =
+                (EntityPlayerMP) obj;
 
-        if (syncedCount == 0) {
-            fullResyncCursor = 0;
-            fullResyncAccumulator = 0;
-        } else {
-            fullResyncAccumulator += syncedCount;
-            fullResyncCount = fullResyncAccumulator / 60;
-            fullResyncAccumulator %= 60;
+            boolean newPlayer =
+                emitterSyncedPlayers.add(
+                    player);
 
-            if (fullResyncCursor >= syncedCount) fullResyncCursor = 0;
-        }
-
-        GTPacketPollutionEmitter fullPacket = null;
-        int syncedIndex = 0;
-
-        for (Object obj : world.playerEntities) {
-            if (!(obj instanceof EntityPlayerMP)) continue;
-
-            EntityPlayerMP player = (EntityPlayerMP) obj;
-            boolean newPlayer = emitterSyncedPlayers.add(player);
-            boolean fullResync = false;
-
-            if (!newPlayer) {
-                if (fullResyncCount > 0) {
-                    int distance = syncedIndex - fullResyncCursor;
-                    if (distance < 0) distance += syncedCount;
-
-                    fullResync = distance < fullResyncCount;
+            if (newPlayer) {
+                if (fullPacket == null) {
+                    fullPacket =
+                        createPollutionSnapshotPacket();
                 }
 
-                syncedIndex++;
+                GTValues.NW.sendToPlayer(
+                    fullPacket,
+                    player);
+
+                continue;
             }
 
-            if (newPlayer || fullResync) {
-                if (fullPacket == null) fullPacket = createPollutionSnapshotPacket();
-                GTValues.NW.sendToPlayer(fullPacket, player);
-            } else if (updatePacket != null) {
-                GTValues.NW.sendToPlayer(updatePacket, player);
+            if (deltaPacket != null) {
+                GTValues.NW.sendToPlayer(
+                    deltaPacket,
+                    player);
             }
-        }
-
-        if (syncedCount > 0) {
-            fullResyncCursor = (fullResyncCursor + fullResyncCount) % syncedCount;
         }
     }
 
-    public static PollutionManager getPropagationManager(World world) {
-        return getPollutionManager(world).propagationManager;
+    public static PollutionManager getPropagationManager(
+        World world) {
+
+        if (world == null) {
+            throw new IllegalArgumentException(
+                "World is null");
+        }
+
+        synchronized (PROPAGATION_MANAGERS) {
+            PollutionManager existing =
+                PROPAGATION_MANAGERS.get(world);
+
+            if (existing != null) {
+                return existing;
+            }
+
+            int dimension =
+                world.provider.dimensionId;
+
+            PollutionManager manager =
+                world.isRemote
+                    ? PollutionManager.createReplica(
+                    dimension)
+                    : new PollutionManager(
+                    dimension);
+
+            /*
+             * Publish before initialization so a re-entrant lookup
+             * for the same World resolves to this same instance.
+             */
+            PROPAGATION_MANAGERS.put(
+                world,
+                manager);
+
+            try {
+                if (!world.isRemote) {
+                    PollutionSavedData.get(world)
+                        .loadInto(manager);
+                }
+
+                return manager;
+
+            } catch (RuntimeException e) {
+                /*
+                 * Do not leave a partially initialized manager
+                 * in the world registry.
+                 */
+                if (PROPAGATION_MANAGERS.get(world)
+                    == manager) {
+
+                    PROPAGATION_MANAGERS.remove(
+                        world);
+                }
+
+                throw e;
+            }
+        }
     }
 
     public static void onWorldTick(TickEvent.WorldTickEvent aEvent) {
@@ -234,15 +313,18 @@ public class Pollution {
 
         pollutionInstance.propagationManager.tick();
 
-        if (aEvent.world.getTotalWorldTime() % QUERY_PROFILE_SYNC_INTERVAL == 0) {
-            pollutionInstance.syncQueryProfile();
-        }
+        long worldTime = aEvent.world.getTotalWorldTime();
 
-        if (aEvent.world.getTotalWorldTime() % 20 == 0) {
-            PollutionSavedData.get(aEvent.world)
-                .markDirty();
+        boolean replicationTick = worldTime % QUERY_PROFILE_SYNC_INTERVAL == 0L;
+
+        if (replicationTick) {
+            PollutionSavedData.get(aEvent.world).markDirty();
             pollutionInstance.tickVegetation();
             pollutionInstance.syncPlayerPollution();
+        }
+
+        if (worldTime % QUERY_PROFILE_SYNC_INTERVAL == 0L) {
+            pollutionInstance.syncQueryProfile(replicationTick);
         }
     }
 
@@ -483,15 +565,13 @@ public class Pollution {
     }
 
     public static double getLegacyPollution(World world, int x, int y, int z) {
-        if (!GTMod.proxy.mPollution) return 0.0D;
 
-        if (world.isRemote) {
-            return GTMod.clientProxy()
-                .getClientPollutionManager(world.provider.dimensionId)
-                .sample(new BlockPos(x, y, z));
+        if (!GTMod.proxy.mPollution) {
+            return 0.0D;
         }
 
-        return getPropagationManager(world).sample(new BlockPos(x, y, z));
+        return getPropagationManager(world)
+            .sample(new BlockPos(x, y, z));
     }
 
     public static boolean hasPollution(Chunk ch) {

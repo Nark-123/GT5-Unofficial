@@ -6,7 +6,7 @@ import net.minecraft.world.World;
 import com.google.common.io.ByteArrayDataInput;
 
 import gregtech.GTMod;
-import gregtech.common.propagation.PollutionManager;
+import gregtech.common.propagation.pollution.PollutionManager;
 import io.netty.buffer.ByteBuf;
 
 public class GTPacketPollutionEmitter extends GTPacket {

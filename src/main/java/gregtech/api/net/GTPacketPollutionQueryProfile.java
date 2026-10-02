@@ -5,8 +5,8 @@ import net.minecraft.world.World;
 
 import com.google.common.io.ByteArrayDataInput;
 
-import gregtech.common.propagation.PollutionQueryProfileClientState;
-import gregtech.common.propagation.PollutionQueryProfiler;
+import gregtech.common.propagation.debug.PollutionQueryProfileClientState;
+import gregtech.common.propagation.debug.PollutionQueryProfiler;
 import io.netty.buffer.ByteBuf;
 
 public class GTPacketPollutionQueryProfile extends GTPacket {
@@ -23,7 +23,51 @@ public class GTPacketPollutionQueryProfile extends GTPacket {
     private int emitterCount;
     private int influencerCount;
 
+    private boolean hasParity;
+    private int parityX;
+    private int parityY;
+    private int parityZ;
+    private double serverSample;
+    private double serverReference;
+
     public GTPacketPollutionQueryProfile() {}
+
+    public GTPacketPollutionQueryProfile(
+        int ticks,
+        PollutionQueryProfiler.Snapshot snapshot,
+        int emitterCount,
+        int influencerCount,
+        int parityX,
+        int parityY,
+        int parityZ,
+        double serverSample,
+        double serverReference) {
+
+        this(
+            ticks,
+            snapshot,
+            emitterCount,
+            influencerCount);
+
+        if (!Double.isFinite(serverSample)
+            || !Double.isFinite(serverReference)) {
+
+            throw new IllegalArgumentException(
+                "Invalid parity sample");
+        }
+
+        this.hasParity = true;
+
+        this.parityX = parityX;
+        this.parityY = parityY;
+        this.parityZ = parityZ;
+
+        this.serverSample =
+            serverSample;
+
+        this.serverReference =
+            serverReference;
+    }
 
     public GTPacketPollutionQueryProfile(int ticks, PollutionQueryProfiler.Snapshot snapshot, int emitterCount,
         int influencerCount) {
@@ -53,6 +97,24 @@ public class GTPacketPollutionQueryProfile extends GTPacket {
         out.writeInt(maxInfluencersPerEmitter);
         out.writeInt(emitterCount);
         out.writeInt(influencerCount);
+        out.writeBoolean(hasParity);
+
+        if (hasParity) {
+            out.writeInt(
+                parityX);
+
+            out.writeInt(
+                parityY);
+
+            out.writeInt(
+                parityZ);
+
+            out.writeDouble(
+                serverSample);
+
+            out.writeDouble(
+                serverReference);
+        }
     }
 
     @Override
@@ -70,6 +132,33 @@ public class GTPacketPollutionQueryProfile extends GTPacket {
         packet.maxInfluencersPerEmitter = data.readInt();
         packet.emitterCount = data.readInt();
         packet.influencerCount = data.readInt();
+        packet.hasParity = data.readBoolean();
+
+        if (packet.hasParity) {
+            packet.parityX =
+                data.readInt();
+
+            packet.parityY =
+                data.readInt();
+
+            packet.parityZ =
+                data.readInt();
+
+            packet.serverSample =
+                data.readDouble();
+
+            packet.serverReference =
+                data.readDouble();
+
+            if (!Double.isFinite(
+                packet.serverSample)
+                || !Double.isFinite(
+                packet.serverReference)) {
+
+                throw new IllegalArgumentException(
+                    "Invalid parity sample");
+            }
+        }
 
         return packet;
     }
@@ -93,6 +182,19 @@ public class GTPacketPollutionQueryProfile extends GTPacket {
             maxInfluencersPerEmitter,
             emitterCount,
             influencerCount);
+
+        if (hasParity) {
+            PollutionQueryProfileClientState
+                .updateParity(
+                    dimension,
+                    parityX,
+                    parityY,
+                    parityZ,
+                    serverSample,
+                    serverReference,
+                    emitterCount,
+                    influencerCount);
+        }
     }
 
     @Override

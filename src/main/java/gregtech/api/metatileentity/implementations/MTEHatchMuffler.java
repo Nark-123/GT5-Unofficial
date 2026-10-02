@@ -23,7 +23,7 @@ import gregtech.api.util.GTSplit;
 import gregtech.api.util.WorldSpawnedEventBuilder;
 import gregtech.api.util.tooltip.TooltipHelper;
 import gregtech.common.pollution.Pollution;
-import gregtech.common.propagation.PollutionSource;
+import gregtech.common.propagation.pollution.source.PollutionSource;
 
 @SuppressWarnings("unused") // Unused API is expected within scope
 @IMetaTileEntity.SkipGenerateDescription

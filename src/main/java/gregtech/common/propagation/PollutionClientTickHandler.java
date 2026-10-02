@@ -1,11 +1,11 @@
 package gregtech.common.propagation;
 
+import gregtech.common.pollution.Pollution;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.World;
 
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.gameevent.TickEvent;
-import gregtech.GTMod;
 
 public class PollutionClientTickHandler {
 
@@ -18,8 +18,6 @@ public class PollutionClientTickHandler {
 
         if (world == null || mc.isGamePaused()) return;
 
-        GTMod.clientProxy()
-            .getClientPollutionManager(world.provider.dimensionId)
-            .tick();
+        Pollution.getPropagationManager(world).tick();
     }
 }
