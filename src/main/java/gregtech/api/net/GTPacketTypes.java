@@ -58,7 +58,6 @@ public enum GTPacketTypes {
     SYNC_TILE_RENDER_DATA_TO_CLIENT(46, new GTPacketClientMTERendererData()),
     OBSERVE_MACHINE(47, new PacketObserveMachine()),
     OPEN_REMOTE_MTE_GUI(48, new PacketOpenRemoteMteGui()),
-    POLLUTION_EMITTER(49, new GTPacketPollutionEmitter()),
     POLLUTION_QUERY_PROFILE(50, new GTPacketPollutionQueryProfile()),
     POLLUTION_STATE(51, new GTPacketPollutionState()),
 

@@ -164,7 +164,6 @@ import tectech.mechanics.boseEinsteinCondensate.BECFactoryGrid;
 public class GTClient extends GTProxy {
 
     public final PollutionRenderer mPollutionRenderer = new PollutionRenderer();
-    private final Map<Integer, PollutionManager> clientPollutionManagers = new HashMap<>();
     public final MetaGeneratedItemRenderer metaItemRenderer = new MetaGeneratedItemRenderer();
     public GTPowerfailRenderer powerfailRenderer;
     public KeyBinding shakeLockKey;
@@ -538,16 +537,6 @@ public class GTClient extends GTProxy {
         return (short) tmp;
     }
 
-    public PollutionManager getClientPollutionManager(int dimension) {
-        return clientPollutionManagers.computeIfAbsent(
-            dimension,
-            PollutionManager::createReplica);
-    }
-
-    public void removeClientPollutionManager(int dimension) {
-        clientPollutionManagers.remove(dimension);
-    }
-
     public float getAnimationRenderTicks() {
         return mAnimationTick + renderTickTime;
     }
@@ -665,12 +654,18 @@ public class GTClient extends GTProxy {
         super.onWorldUnload(event);
 
         if (event.world.isRemote) {
-            VacuumConveyorPipeClientStateManager.INSTANCE.clear();
+            VacuumConveyorPipeClientStateManager
+                .INSTANCE
+                .clear();
 
-            int dimension = event.world.provider.dimensionId;
+            int dimension =
+                event.world.provider.dimensionId;
 
-            removeClientPollutionManager(dimension);
-            PollutionQueryProfileClientState.clear(dimension);
+            Pollution.removePropagationManager(
+                event.world);
+
+            PollutionQueryProfileClientState
+                .clear(dimension);
         }
 
         RenderOverlay.onWorldUnload(event.world);
@@ -688,14 +683,5 @@ public class GTClient extends GTProxy {
             event.world,
             event.getChunk()
                 .getChunkCoordIntPair());
-    }
-
-    @Deprecated
-    public void processChunkPollutionPacket(ChunkCoordIntPair chunk, int pollution) {
-        World world = Minecraft.getMinecraft().theWorld;
-        if (world == null) return;
-
-        getClientPollutionManager(world.provider.dimensionId)
-            .setEmitterPollution(chunk.chunkXPos, 70 >> 4, chunk.chunkZPos, pollution);
     }
 }

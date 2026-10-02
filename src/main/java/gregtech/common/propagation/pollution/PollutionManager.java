@@ -391,52 +391,6 @@ public class PollutionManager extends AbstractPropagationManager<PollutionFieldE
         }
     }
 
-    public void applyEmitterSnapshot(int[] cellX, int[] cellY, int[] cellZ, double[] pollution) {
-        if (cellX.length != pollution.length
-            || cellY.length != pollution.length
-            || cellZ.length != pollution.length) {
-
-            throw new IllegalArgumentException("Emitter snapshot length mismatch");
-        }
-
-        for (double value : pollution) {
-            if (!Double.isFinite(value)) {
-                throw new IllegalArgumentException("Invalid emitter pollution: " + value);
-            }
-        }
-
-        Set<Vec3> received = new TreeSet<>(CELL_COMPARATOR);
-
-        for (int i = 0; i < pollution.length; i++) {
-
-            Vec3 cell = Vec3.createVectorHelper(cellX[i], cellY[i], cellZ[i]);
-            received.add(cell);
-
-            PollutionEmitter emitter = pollutionEmitters.get(cell);
-
-            if (emitter == null) {
-                emitter = new PollutionEmitter(dimension, cell, 256);
-                emitter.setPollution(pollution[i]);
-            } else {
-                emitter.setPollution(pollution[i]);
-            }
-
-            registerStandardEmitter(emitter);
-        }
-
-        List<PollutionEmitter> removed = new ArrayList<>();
-
-        for (Map.Entry<Vec3, PollutionEmitter> entry : pollutionEmitters.entrySet()) {
-            if (!received.contains(entry.getKey())) {
-                removed.add(entry.getValue());
-            }
-        }
-
-        for (PollutionEmitter emitter : removed) {
-            unregisterEmitter(emitter);
-        }
-    }
-
     private void registerStandardEmitter(PollutionEmitter emitter) {
         Vec3 cell = emitter.getCellPosition();
 
@@ -450,32 +404,6 @@ public class PollutionManager extends AbstractPropagationManager<PollutionFieldE
             groupKey);
 
         registerGroupedEmitter(groupRef, emitter);
-    }
-
-    public void setEmitterPollution(int cellX, int cellY, int cellZ, double pollution) {
-        if (!Double.isFinite(pollution)) {
-            throw new IllegalArgumentException("Invalid emitter pollution: " + pollution);
-        }
-
-        Vec3 cellPosition = Vec3.createVectorHelper(cellX, cellY, cellZ);
-        PollutionEmitter emitter = pollutionEmitters.get(cellPosition);
-
-        if (pollution <= 0.0D) {
-            if (emitter != null) {
-                unregisterEmitter(emitter);
-            }
-
-            return;
-        }
-
-        if (emitter == null) {
-            emitter = new PollutionEmitter(dimension, cellPosition,256);
-
-            emitter.setPollution(pollution);
-            registerStandardEmitter(emitter);
-        } else {
-            emitter.setPollution(pollution);
-        }
     }
 
     public void addPollution(int x, int y, int z, double pollution) {

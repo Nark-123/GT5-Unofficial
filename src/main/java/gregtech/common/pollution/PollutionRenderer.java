@@ -8,10 +8,8 @@ import net.minecraft.client.particle.EntityFX;
 import net.minecraft.client.renderer.OpenGlHelper;
 import net.minecraft.potion.Potion;
 import net.minecraft.util.MathHelper;
-import net.minecraft.world.ChunkCoordIntPair;
 import net.minecraft.world.World;
 import net.minecraftforge.client.event.EntityViewRenderEvent;
-import net.minecraftforge.event.world.WorldEvent;
 
 import org.lwjgl.opengl.GL11;
 
@@ -272,20 +270,5 @@ public class PollutionRenderer {
         if (mc.theWorld == null) return 0;
 
         return Pollution.getLegacyPollution(mc.theWorld, x >> 4, z >> 4);
-    }
-
-    @Deprecated
-    @SubscribeEvent(priority = EventPriority.HIGH)
-    public void onWorldUnload(WorldEvent.Unload event) {
-        if (!event.world.isRemote) return;
-
-        GTMod.clientProxy()
-            .removeClientPollutionManager(event.world.provider.dimensionId);
-    }
-
-    @Deprecated
-    public void processPacket(ChunkCoordIntPair chunk, int pollution) {
-        GTMod.clientProxy()
-            .processChunkPollutionPacket(chunk, pollution);
     }
 }

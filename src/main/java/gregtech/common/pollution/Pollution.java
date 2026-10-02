@@ -45,7 +45,6 @@ import gregtech.api.hazards.HazardProtection;
 import gregtech.api.interfaces.ICleanroom;
 import gregtech.api.interfaces.ICleanroomReceiver;
 import gregtech.api.interfaces.tileentity.IGregTechTileEntity;
-import gregtech.api.net.GTPacketPollutionEmitter;
 import gregtech.api.net.GTPacketPollutionQueryProfile;
 import gregtech.api.util.GTChunkAssociatedData;
 import gregtech.api.util.GTUtility;
@@ -449,6 +448,19 @@ public class Pollution {
         }
     }
 
+    public static void removePropagationManager(
+        World world) {
+
+        if (world == null) {
+            return;
+        }
+
+        synchronized (PROPAGATION_MANAGERS) {
+            PROPAGATION_MANAGERS.remove(
+                world);
+        }
+    }
+
     private static Pollution getPollutionManager(World world) {
         return GTMod.proxy.dimensionWisePollution
             .computeIfAbsent(world.provider.dimensionId, i -> new Pollution(world));
@@ -682,8 +694,18 @@ public class Pollution {
 
         @SubscribeEvent
         public void onWorldUnload(WorldEvent.Unload e) {
-            if (e.world.isRemote) return;
-            GTMod.proxy.dimensionWisePollution.remove(e.world.provider.dimensionId);
+
+            if (e.world.isRemote) {
+                return;
+            }
+
+            removePropagationManager(
+                e.world);
+
+            GTMod.proxy
+                .dimensionWisePollution
+                .remove(
+                    e.world.provider.dimensionId);
         }
     }
 
