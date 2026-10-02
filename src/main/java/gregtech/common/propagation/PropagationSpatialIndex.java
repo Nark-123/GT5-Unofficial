@@ -57,34 +57,48 @@ public class PropagationSpatialIndex<E extends PropagationEmitter> {
         long revision = emitter.getPropagationRevision();
         Long indexedRevision = emitterRevisions.get(emitter);
 
-        if (indexedRevision != null && indexedRevision == revision) return false;
+        if (indexedRevision != null
+            && indexedRevision == revision) {
 
-        emitterRevisions.put(emitter, revision);
+            return false;
+        }
 
-        PropagationBatchBounds current = emitterBounds.get(emitter);
+        PropagationBatchBounds current =
+            emitterBounds.get(emitter);
 
         if (current == null) {
             add(emitter);
             return true;
         }
 
-        PropagationBatchBounds required = getRequiredBounds(emitter);
+        PropagationBatchBounds required =
+            getRequiredBounds(emitter);
 
-        if (current.contains(required)) return false;
+        if (current.contains(required)) {
+            emitterRevisions.put(emitter, revision);
+            return false;
+        }
 
-        PropagationBatchBounds expanded = current.expandToInclude(required);
+        PropagationBatchBounds expanded =
+            current.expandToInclude(required);
 
         for (int x = expanded.minX; x <= expanded.maxX; x++) {
             for (int y = expanded.minY; y <= expanded.maxY; y++) {
                 for (int z = expanded.minZ; z <= expanded.maxZ; z++) {
-                    if (current.contains(x, y, z)) continue;
+                    if (current.contains(x, y, z)) {
+                        continue;
+                    }
 
-                    getOrCreate(Vec3.createVectorHelper(x, y, z)).add(emitter);
+                    getOrCreate(
+                        Vec3.createVectorHelper(x, y, z))
+                        .add(emitter);
                 }
             }
         }
 
         emitterBounds.put(emitter, expanded);
+        emitterRevisions.put(emitter, revision);
+
         return true;
     }
 

@@ -23,12 +23,13 @@ public abstract class AbstractPropagationManager<E extends PropagationEmitter>
     private final Map<EmitterGroupRef<?>, E> emitterGroups = new HashMap<>();
 
     protected final List<E> emitters = new ArrayList<>();
-    protected final PropagationSpatialIndex<E> spatialIndex =
-        new PropagationSpatialIndex<>();
+    private final Set<E> emitterIdentities = Collections.newSetFromMap(new IdentityHashMap<>());
+    private final Map<E, EmitterGroupRef<?>> emitterGroupRefs = new IdentityHashMap<>();
+    protected final PropagationSpatialIndex<E> spatialIndex = new PropagationSpatialIndex<>();
 
     protected final List<PropagationInfluencer> influencers = new ArrayList<>();
-    protected final PropagationInfluencerSpatialIndex influencerSpatialIndex =
-        new PropagationInfluencerSpatialIndex();
+    protected final PropagationInfluencerSpatialIndex influencerSpatialIndex = new PropagationInfluencerSpatialIndex();
+    private final Set<PropagationInfluencer> influencerIdentities = Collections.newSetFromMap(new IdentityHashMap<>());
 
     private static final int INFLUENCER_UPDATE_INTERVAL = 20;
     private int influencerUpdateCursor;
@@ -63,7 +64,7 @@ public abstract class AbstractPropagationManager<E extends PropagationEmitter>
             throw new IllegalArgumentException("Influencer is null");
         }
 
-        if (influencers.contains(influencer)) {
+        if (influencerIdentities.contains(influencer)) {
             return;
         }
 
@@ -76,48 +77,83 @@ public abstract class AbstractPropagationManager<E extends PropagationEmitter>
             throw new IllegalArgumentException("Invalid influencer range: " + range);
         }
 
-        influencers.add(influencer);
-        influencerSpatialIndex.add(influencer);
-
-        double coverageRange =
-            influencerSpatialIndex.getCoverageRange(range);
-
-        for (E emitter : spatialIndex.get(position, coverageRange)) {
-            if (emitter.acceptsInfluencer(influencer)) {
-                emitter.addInfluencer(influencer);
-            }
-        }
-    }
-
-    @Override
-    public final void unregisterInfluencer(PropagationInfluencer influencer) {
-        if (influencer == null) {
-            return;
-        }
-
-        if (!influencers.remove(influencer)) {
-            return;
-        }
-
-        Vec3 position = influencer.getPosition();
-        double range = influencer.getRange();
-
-        if (position != null
-            && Double.isFinite(position.xCoord)
-            && Double.isFinite(position.yCoord)
-            && Double.isFinite(position.zCoord)
-            && Double.isFinite(range)
-            && range >= 0.0D) {
+        try {
+            influencerSpatialIndex.add(influencer);
+            influencers.add(influencer);
+            influencerIdentities.add(influencer);
 
             double coverageRange =
                 influencerSpatialIndex.getCoverageRange(range);
 
             for (E emitter : spatialIndex.get(position, coverageRange)) {
-                emitter.removeInfluencer(influencer);
+                if (emitter.acceptsInfluencer(influencer)) {
+                    emitter.addInfluencer(influencer);
+                }
+            }
+        } catch (RuntimeException failure) {
+            rollbackInfluencerRegistration(influencer);
+            throw failure;
+        }
+    }
+
+    private void rollbackInfluencerRegistration(
+        PropagationInfluencer influencer) {
+
+        for (E emitter : emitters) {
+            emitter.removeInfluencer(influencer);
+        }
+
+        influencerIdentities.remove(influencer);
+        removeInfluencerIdentity(influencer);
+        influencerSpatialIndex.remove(influencer);
+    }
+
+    private boolean removeInfluencerIdentity(
+        PropagationInfluencer influencer) {
+
+        for (Iterator<PropagationInfluencer> iterator =
+             influencers.iterator(); iterator.hasNext();) {
+
+            if (iterator.next() == influencer) {
+                iterator.remove();
+                return true;
             }
         }
 
+        return false;
+    }
+
+    @Override
+    public final void unregisterInfluencer(
+        PropagationInfluencer influencer) {
+
+        if (influencer == null
+            || !influencerIdentities.remove(influencer)) {
+            return;
+        }
+
+        removeInfluencerIdentity(influencer);
+
+        for (E emitter : emitters) {
+            emitter.removeInfluencer(influencer);
+        }
+
         influencerSpatialIndex.remove(influencer);
+    }
+
+    protected final void refreshEmitterGeometry(E emitter) {
+        if (emitter == null) {
+            throw new IllegalArgumentException("Emitter is null");
+        }
+
+        if (!emitterIdentities.contains(emitter)) {
+            throw new IllegalStateException(
+                "Emitter is not registered");
+        }
+
+        if (spatialIndex.ensureCoverage(emitter)) {
+            updateInfluencerCandidates(emitter);
+        }
     }
 
     protected final void registerEmitterInfrastructure(E emitter) {
@@ -130,13 +166,23 @@ public abstract class AbstractPropagationManager<E extends PropagationEmitter>
                 "Emitter dimension mismatch: " + emitter.getDimension() + " != " + dimension);
         }
 
-        if (emitters.contains(emitter)) {
+        if (emitterIdentities.contains(emitter)) {
             return;
         }
 
-        emitters.add(emitter);
         spatialIndex.add(emitter);
+        emitters.add(emitter);
+        emitterIdentities.add(emitter);
         updateInfluencerCandidates(emitter);
+    }
+
+    private void removeEmitterIdentity(E emitter) {
+        for (Iterator<E> iterator = emitters.iterator(); iterator.hasNext();) {
+            if (iterator.next() == emitter) {
+                iterator.remove();
+                return;
+            }
+        }
     }
 
     public final int getEmitterCount() {
@@ -148,7 +194,8 @@ public abstract class AbstractPropagationManager<E extends PropagationEmitter>
     }
 
     protected final void unregisterEmitterInfrastructure(E emitter) {
-        emitters.remove(emitter);
+        emitterIdentities.remove(emitter);
+        removeEmitterIdentity(emitter);
         spatialIndex.remove(emitter);
         removeEmitterBindings(emitter);
     }
@@ -194,6 +241,16 @@ public abstract class AbstractPropagationManager<E extends PropagationEmitter>
         EmitterGroupRef<?> groupRef,
         E emitter) {
 
+        if (groupRef == null) {
+            throw new IllegalArgumentException(
+                "Emitter group ref is null");
+        }
+
+        if (emitter == null) {
+            throw new IllegalArgumentException(
+                "Emitter is null");
+        }
+
         E existing = emitterGroups.get(groupRef);
 
         if (existing == emitter) {
@@ -202,11 +259,37 @@ public abstract class AbstractPropagationManager<E extends PropagationEmitter>
 
         if (existing != null) {
             throw new IllegalStateException(
-                "Emitter group already occupied: " + groupRef.getDefinitionId());
+                "Emitter group already occupied: "
+                    + groupRef.getDefinitionId());
         }
 
-        registerEmitterManaged(emitter);
-        emitterGroups.put(groupRef, emitter);
+        EmitterGroupRef<?> existingRef =
+            emitterGroupRefs.get(emitter);
+
+        if (existingRef != null) {
+            throw new IllegalStateException(
+                "Emitter already belongs to group: "
+                    + existingRef.getDefinitionId());
+        }
+
+        if (emitterIdentities.contains(emitter)) {
+            throw new IllegalStateException(
+                "Registered emitter has no group binding");
+        }
+
+        validateEmitterRegistration(groupRef, emitter);
+
+        try {
+            registerEmitterInfrastructure(emitter);
+
+            emitterGroups.put(groupRef, emitter);
+            emitterGroupRefs.put(emitter, groupRef);
+
+            onEmitterRegistered(groupRef, emitter);
+        } catch (RuntimeException failure) {
+            rollbackEmitterRegistration(groupRef, emitter);
+            throw failure;
+        }
     }
 
     @Override
@@ -251,9 +334,7 @@ public abstract class AbstractPropagationManager<E extends PropagationEmitter>
                 continue;
             }
 
-            if (spatialIndex.ensureCoverage(emitter)) {
-                updateInfluencerCandidates(emitter);
-            }
+            refreshEmitterGeometry(emitter);
 
             emitterUpdateCursor++;
         }
@@ -292,12 +373,22 @@ public abstract class AbstractPropagationManager<E extends PropagationEmitter>
     }
 
     protected final void removeEmitterBindings(E emitter) {
-        Iterator<Map.Entry<EmitterGroupRef<?>, E>> groupIterator =
-            emitterGroups.entrySet().iterator();
+        EmitterGroupRef<?> groupRef = emitterGroupRefs.remove(emitter);
 
-        while (groupIterator.hasNext()) {
-            if (groupIterator.next().getValue() == emitter) {
-                groupIterator.remove();
+        if (groupRef != null) {
+            if (emitterGroups.get(groupRef) == emitter) {
+                emitterGroups.remove(groupRef);
+            }
+
+            return;
+        }
+
+        // Defensive cleanup for partially registered/legacy state.
+        Iterator<Map.Entry<EmitterGroupRef<?>, E>> iterator = emitterGroups.entrySet().iterator();
+
+        while (iterator.hasNext()) {
+            if (iterator.next().getValue() == emitter) {
+                iterator.remove();
             }
         }
     }
@@ -307,31 +398,46 @@ public abstract class AbstractPropagationManager<E extends PropagationEmitter>
             return;
         }
 
+        if (!emitterIdentities.contains(emitter)) {
+            return;
+        }
+
+        EmitterGroupRef<?> groupRef =
+            emitterGroupRefs.get(emitter);
+
+        if (groupRef == null) {
+            throw new IllegalStateException(
+                "Registered emitter has no group binding");
+        }
+
         unregisterEmitterInfrastructure(emitter);
-        onEmitterUnregistered(emitter);
+        onEmitterUnregistered(groupRef, emitter);
     }
 
-    protected abstract void onEmitterUnregistered(E emitter);
+    protected abstract void onEmitterUnregistered(EmitterGroupRef<?> groupRef, E emitter);
 
     protected abstract void onEmitterStateChanged(E emitter);
 
-    protected abstract void validateEmitterRegistration(E emitter);
+    protected abstract void validateEmitterRegistration(EmitterGroupRef<?> groupRef, E emitter);
 
-    protected abstract void onEmitterRegistered(E emitter);
+    protected abstract void onEmitterRegistered(EmitterGroupRef<?> groupRef, E emitter);
 
-    protected final void registerEmitterManaged(E emitter) {
-        if (emitter == null) {
-            throw new IllegalArgumentException("Emitter is null");
+    protected void onEmitterRegistrationFailed(EmitterGroupRef<?> groupRef, E emitter) {}
+
+    private void rollbackEmitterRegistration(
+        EmitterGroupRef<?> groupRef,
+        E emitter) {
+
+        for (PropagationInfluencer influencer : influencers) {
+            emitter.removeInfluencer(influencer);
         }
 
-        if (emitter.getDimension() != dimension) {
-            throw new IllegalArgumentException(
-                "Emitter dimension mismatch: " + emitter.getDimension() + " != " + dimension);
-        }
+        emitterIdentities.remove(emitter);
+        removeEmitterIdentity(emitter);
+        spatialIndex.remove(emitter);
+        removeEmitterBindings(emitter);
 
-        validateEmitterRegistration(emitter);
-        registerEmitterInfrastructure(emitter);
-        onEmitterRegistered(emitter);
+        onEmitterRegistrationFailed(groupRef, emitter);
     }
 
     @Override
@@ -356,6 +462,10 @@ public abstract class AbstractPropagationManager<E extends PropagationEmitter>
         }
 
         return result;
+    }
+
+    protected final EmitterGroupRef<?> getEmitterGroupRef(E emitter) {
+        return emitterGroupRefs.get(emitter);
     }
 
     @Override
@@ -405,6 +515,7 @@ public abstract class AbstractPropagationManager<E extends PropagationEmitter>
             new EmitterGroupRef<>(definition.getId(), groupKey);
 
         E emitter = emitterGroups.get(groupRef);
+        boolean created = false;
 
         if (emitter == null) {
             emitter = definition.getFactory()
@@ -415,9 +526,18 @@ public abstract class AbstractPropagationManager<E extends PropagationEmitter>
             }
 
             registerGroupedEmitter(groupRef, emitter);
+            created = true;
         }
 
-        emitter.addSource(source);
+        try {
+            emitter.addSource(source);
+        } catch (RuntimeException failure) {
+            if (created) {
+                rollbackEmitterRegistration(groupRef, emitter);
+            }
+
+            throw failure;
+        }
     }
 
     private void validatePosition(Vec3 position, String type) {

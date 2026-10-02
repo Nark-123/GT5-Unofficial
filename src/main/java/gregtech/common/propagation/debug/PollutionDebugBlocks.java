@@ -4,10 +4,15 @@ import net.minecraft.block.Block;
 
 import cpw.mods.fml.common.registry.GameRegistry;
 
+import gregtech.common.propagation.debug.BlockPollutionTestCleanupBox;
+import gregtech.common.propagation.debug.BlockPollutionTestCleanupSphere;
+
 public final class PollutionDebugBlocks {
 
     public static Block testEmitter;
     public static Block testInfluencer;
+    public static Block testCleanupSphere;
+    public static Block testCleanupBox;
 
     private PollutionDebugBlocks() {}
 
@@ -22,5 +27,25 @@ public final class PollutionDebugBlocks {
         GameRegistry.registerTileEntity(TileEntityPollutionTestEmitter.class, "GT_PollutionTestEmitter");
 
         GameRegistry.registerTileEntity(TileEntityPollutionTestInfluencer.class, "GT_PollutionTestInfluencer");
+
+        testCleanupSphere = new BlockPollutionTestCleanupSphere();
+
+        testCleanupBox = new BlockPollutionTestCleanupBox();
+
+        GameRegistry.registerBlock(
+            testCleanupSphere,
+            "pollution_test_cleanup_sphere");
+
+        GameRegistry.registerBlock(
+            testCleanupBox,
+            "pollution_test_cleanup_box");
+
+        GameRegistry.registerTileEntity(
+            TileEntityPollutionTestCleanupSphere.class,
+            "GT_PollutionTestCleanupSphere");
+
+        GameRegistry.registerTileEntity(
+            TileEntityPollutionTestCleanupBox.class,
+            "GT_PollutionTestCleanupBox");
     }
 }

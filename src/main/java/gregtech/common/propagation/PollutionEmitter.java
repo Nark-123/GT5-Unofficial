@@ -11,7 +11,7 @@ import net.minecraft.util.Vec3;
 
 import it.unimi.dsi.fastutil.longs.Long2DoubleOpenHashMap;
 
-public class PollutionEmitter implements PropagationEmitter {
+public class PollutionEmitter implements PollutionFieldEmitter {
 
     // Approximately 24-hour half-life at one decay step per second.
     private static final double DEFAULT_SMOOTHING = 0.99999198;
@@ -126,6 +126,7 @@ public class PollutionEmitter implements PropagationEmitter {
         return getInfluence(pos, null);
     }
 
+    @Override
     public double getInfluence(Vec3 pos, PollutionQueryProfiler profiler) {
         if (pollution <= 0.0D) {
             return 0.0D;

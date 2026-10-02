@@ -11,4 +11,6 @@ public interface PropagationSource {
     boolean isValid();
 
     double consumeEmission();
+
+    String getEmitterDefinitionId();
 }

@@ -98,7 +98,7 @@ public class Pollution {
     }
 
     private GTPacketPollutionEmitter createPollutionSnapshotPacket() {
-        List<PollutionEmitter> emitters = propagationManager.getEmitters();
+        List<PollutionEmitter> emitters = propagationManager.getStandardEmitters();
 
         int count = 0;
 
@@ -274,7 +274,7 @@ public class Pollution {
     }
 
     private void tickVegetation() {
-        List<PollutionEmitter> emitters = propagationManager.getEmitters();
+        List<PollutionEmitter> emitters = propagationManager.getStandardEmitters();
 
         if (emitters.isEmpty()) {
             return;

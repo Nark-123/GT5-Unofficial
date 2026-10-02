@@ -47,6 +47,11 @@ public class PollutionSource implements PropagationSource {
     }
 
     @Override
+    public String getEmitterDefinitionId() {
+        return PollutionEmitterDefinitions.STANDARD_ID;
+    }
+
+    @Override
     public int getDimension() {
         return dimension;
     }

@@ -3,6 +3,7 @@ package gregtech.common.propagation;
 import static gregtech.GTLoggers.GT_FML_LOGGER;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -18,7 +19,7 @@ import net.minecraft.util.Vec3;
 
 import com.gtnewhorizon.gtnhlib.blockpos.BlockPos;
 
-public class PollutionManager extends AbstractPropagationManager<PollutionEmitter> {
+public class PollutionManager extends AbstractPropagationManager<PollutionFieldEmitter> {
     private final Map<Vec3, PollutionEmitter> pollutionEmitters = new TreeMap<>(CELL_COMPARATOR);
     private final Set<BlockPos> removedEmitterCells = new HashSet<>();
     private final Set<PollutionEmitter> dirtyEmitters = new HashSet<>();
@@ -53,7 +54,7 @@ public class PollutionManager extends AbstractPropagationManager<PollutionEmitte
     public PollutionManager(
         int dimension,
         boolean trackRemovals,
-        PropagationModel<PollutionEmitter> model) {
+        PropagationModel<PollutionFieldEmitter> model) {
 
         super(dimension, model);
         this.trackRemovals = trackRemovals;
@@ -72,15 +73,50 @@ public class PollutionManager extends AbstractPropagationManager<PollutionEmitte
     }
 
     public void registerEmitter(PollutionEmitter emitter) {
-        registerEmitterManaged(emitter);
+        registerStandardEmitter(emitter);
+    }
+
+    public List<PollutionEmitter> getStandardEmitters() {
+        return Collections.unmodifiableList(
+            new ArrayList<>(pollutionEmitters.values()));
+    }
+
+    private PollutionEmitter getStandardEmitter(
+        EmitterGroupRef<?> groupRef,
+        PollutionFieldEmitter emitter) {
+
+        if (!PollutionEmitterDefinitions.STANDARD_ID.equals(
+            groupRef.getDefinitionId())) {
+
+            return null;
+        }
+
+        if (!(emitter instanceof PollutionEmitter)) {
+            throw new IllegalStateException(
+                "Standard pollution definition created "
+                    + "non-standard emitter");
+        }
+
+        return (PollutionEmitter) emitter;
     }
 
     @Override
-    protected void validateEmitterRegistration(PollutionEmitter emitter) {
-        Vec3 cell = emitter.getCellPosition();
-        PollutionEmitter existing = pollutionEmitters.get(cell);
+    protected void validateEmitterRegistration(
+        EmitterGroupRef<?> groupRef,
+        PollutionFieldEmitter emitter) {
 
-        if (existing == emitter) {
+        PollutionEmitter standard =
+            getStandardEmitter(groupRef, emitter);
+
+        if (standard == null) {
+            return;
+        }
+
+        Vec3 cell = standard.getCellPosition();
+        PollutionEmitter existing =
+            pollutionEmitters.get(cell);
+
+        if (existing == standard) {
             return;
         }
 
@@ -94,10 +130,20 @@ public class PollutionManager extends AbstractPropagationManager<PollutionEmitte
     }
 
     @Override
-    protected void onEmitterRegistered(PollutionEmitter emitter) {
-        Vec3 cell = emitter.getCellPosition();
+    protected void onEmitterRegistered(
+        EmitterGroupRef<?> groupRef,
+        PollutionFieldEmitter emitter) {
 
-        pollutionEmitters.put(cell, emitter);
+        PollutionEmitter standard =
+            getStandardEmitter(groupRef, emitter);
+
+        if (standard == null) {
+            return;
+        }
+
+        Vec3 cell = standard.getCellPosition();
+
+        pollutionEmitters.put(cell, standard);
 
         if (trackRemovals) {
             removedEmitterCells.remove(
@@ -109,15 +155,25 @@ public class PollutionManager extends AbstractPropagationManager<PollutionEmitte
     }
 
     @Override
-    protected void onEmitterUnregistered(PollutionEmitter emitter) {
-        Vec3 cell = emitter.getCellPosition();
+    protected void onEmitterUnregistered(
+        EmitterGroupRef<?> groupRef,
+        PollutionFieldEmitter emitter) {
 
-        if (pollutionEmitters.get(cell) != emitter) {
+        PollutionEmitter standard =
+            getStandardEmitter(groupRef, emitter);
+
+        if (standard == null) {
+            return;
+        }
+
+        Vec3 cell = standard.getCellPosition();
+
+        if (pollutionEmitters.get(cell) != standard) {
             return;
         }
 
         pollutionEmitters.remove(cell);
-        dirtyEmitters.remove(emitter);
+        dirtyEmitters.remove(standard);
 
         if (trackRemovals) {
             removedEmitterCells.add(
@@ -129,16 +185,23 @@ public class PollutionManager extends AbstractPropagationManager<PollutionEmitte
     }
 
     @Override
-    protected void onEmitterStateChanged(PollutionEmitter emitter) {
-        dirtyEmitters.add(emitter);
-    }
+    protected void onEmitterStateChanged(
+        PollutionFieldEmitter emitter) {
 
-    public Set<BlockPos> consumeRemovedEmitterCells() {
-        if (removedEmitterCells.isEmpty()) return Collections.emptySet();
+        EmitterGroupRef<?> groupRef =
+            getEmitterGroupRef(emitter);
 
-        Set<BlockPos> removed = new HashSet<>(removedEmitterCells);
-        removedEmitterCells.clear();
-        return removed;
+        if (groupRef == null) {
+            throw new IllegalStateException(
+                "Registered emitter has no group binding");
+        }
+
+        PollutionEmitter standard =
+            getStandardEmitter(groupRef, emitter);
+
+        if (standard != null) {
+            dirtyEmitters.add(standard);
+        }
     }
 
     public List<PollutionEmitter> consumeDirtyEmitters() {
@@ -149,12 +212,25 @@ public class PollutionManager extends AbstractPropagationManager<PollutionEmitte
         return dirty;
     }
 
+    public Set<BlockPos> consumeRemovedEmitterCells() {
+        if (removedEmitterCells.isEmpty()) {
+            return Collections.emptySet();
+        }
+
+        Set<BlockPos> removed =
+            new HashSet<>(removedEmitterCells);
+
+        removedEmitterCells.clear();
+        return removed;
+    }
+
     @Override
     protected double calculateSample(Vec3 position) {
         if (!queryProfilingEnabled) {
             double result = 0.0D;
 
-            for (PollutionEmitter emitter : spatialIndex.get(position)) {
+            for (PollutionFieldEmitter emitter : spatialIndex.get(position)) {
+
                 result += emitter.getInfluence(position);
             }
 
@@ -163,14 +239,16 @@ public class PollutionManager extends AbstractPropagationManager<PollutionEmitte
 
         long start = System.nanoTime();
 
-        List<PollutionEmitter> candidates = spatialIndex.get(position);
+        List<PollutionFieldEmitter> candidates = spatialIndex.get(position);
 
         queryProfiler.beginQuery(candidates.size());
 
         double result = 0.0D;
 
-        for (PollutionEmitter emitter : candidates) {
-            result += emitter.getInfluence(position, queryProfiler);
+        for (PollutionFieldEmitter emitter : candidates) {
+            result += emitter.getInfluence(
+                position,
+                queryProfiler);
         }
 
         queryProfiler.endQuery(System.nanoTime() - start);
@@ -217,7 +295,7 @@ public class PollutionManager extends AbstractPropagationManager<PollutionEmitte
     public NBTTagCompound writeToNBT(NBTTagCompound nbt) {
         NBTTagList emitterList = new NBTTagList();
 
-        for (PollutionEmitter emitter : emitters) {
+        for (PollutionEmitter emitter : pollutionEmitters.values()) {
 
             double pollution = emitter.getPollution();
 
@@ -263,6 +341,27 @@ public class PollutionManager extends AbstractPropagationManager<PollutionEmitte
 
             registerStandardEmitter(emitter);
         }
+    }
+
+    @Override
+    protected void onEmitterRegistrationFailed(
+        EmitterGroupRef<?> groupRef,
+        PollutionFieldEmitter emitter) {
+
+        PollutionEmitter standard =
+            getStandardEmitter(groupRef, emitter);
+
+        if (standard == null) {
+            return;
+        }
+
+        Vec3 cell = standard.getCellPosition();
+
+        if (pollutionEmitters.get(cell) == standard) {
+            pollutionEmitters.remove(cell);
+        }
+
+        dirtyEmitters.remove(standard);
     }
 
     public void applyEmitterSnapshot(int[] cellX, int[] cellY, int[] cellZ, double[] pollution) {

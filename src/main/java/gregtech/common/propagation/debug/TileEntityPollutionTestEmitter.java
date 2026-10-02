@@ -1,5 +1,6 @@
 package gregtech.common.propagation.debug;
 
+import gregtech.common.propagation.PollutionEmitterDefinitions;
 import gregtech.common.propagation.PollutionManager;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.tileentity.TileEntity;
@@ -130,6 +131,11 @@ public class TileEntityPollutionTestEmitter extends TileEntity {
             double result = emission;
             emission = 0.0D;
             return result;
+        }
+
+        @Override
+        public String getEmitterDefinitionId() {
+            return PollutionEmitterDefinitions.STANDARD_ID;
         }
     }
 }
