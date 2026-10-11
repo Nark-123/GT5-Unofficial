@@ -33,6 +33,13 @@
  *
  * For more details, see https://docs.gradle.org/8.0.1/userguide/java_library_plugin.html#sec:java_library_configurations_graph
  */
+
+def pvnrtJar = file("libs/pvnrt-test.jar")
+
+if (pvnrtJar.isFile()) {
+    sourceSets.main.java.srcDir("src/pvnrt/java")
+}
+
 dependencies {
     api("com.github.GTNewHorizons:StructureLib:1.4.45:dev")
     api("net.industrial-craft:industrialcraft-2:2.2.828-experimental:dev")
@@ -131,6 +138,17 @@ dependencies {
     // For testing singularities and foundry
     // runtimeOnlyNonPublishable("com.github.GTNewHorizons:Eternal-Singularity:1.4.3:dev")
     // runtimeOnlyNonPublishable("com.github.GTNewHorizons:Universal-Singularities:8.15.4:dev")
+
+    //For pVnRT integration testing
+    if (pvnrtJar.isFile()) {
+        compileOnly(rfg.deobf(files(pvnrtJar)))
+        runtimeOnlyNonPublishable(files(pvnrtJar))
+    }
+
+    // For testing and benchmarking
+
+    //devOnlyNonPublishable(rfg.deobf(project.files("libs/lagfinder.jar")))
+    //devOnlyNonPublishable('com.github.GTNewHorizons:worldedit-gtnh:v0.0.9')
 
     testImplementation(platform('org.junit:junit-bom:5.14.1'))
     testImplementation('org.junit.jupiter:junit-jupiter')
